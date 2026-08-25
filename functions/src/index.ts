@@ -9,3 +9,6 @@ import { onRequest } from 'firebase-functions/v2/https';
 export const ping = onRequest((req, res) => {
   res.json({ ok: true, from: 'functions', at: new Date().toISOString() });
 });
+
+// Inventory: shelf photo -> candidate items, via Claude vision. Needs ANTHROPIC_API_KEY.
+export { analyzeShelf } from './vision';

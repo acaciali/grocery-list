@@ -7,16 +7,22 @@
  */
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import type { User } from 'firebase/auth';
 import {
   db,
-  ensureSignedIn,
   normalizeKey,
   UNITS,
   type Item,
   type Unit,
 } from '@grocery/shared';
 import { parseQuantity, parseWholeNumber } from './quantity';
+
+/**
+ * `Recipe.createdBy` is a required string, but the app has no auth: it is single-user and
+ * every surface shares one project, so there is no uid to put here. This stands in until
+ * accounts exist, at which point it becomes a real uid and old rows read as "whoever set
+ * this up". Kept as a named constant so those rows are findable when that happens.
+ */
+const SINGLE_USER = 'single-user';
 
 /** One editable ingredient row. `rowId` is a React key only -- it is never persisted. */
 interface IngredientRow {
@@ -188,18 +194,6 @@ export default function RecipePage() {
 
     setSaving(true);
     try {
-      // `createdBy` needs a uid, so this is the first surface to require auth. Anonymous
-      // sign-in must be enabled in the Firebase console or every save fails here -- call
-      // that out rather than reporting a generic "couldn't save".
-      let user: User;
-      try {
-        user = await ensureSignedIn();
-      } catch (err) {
-        console.error(err);
-        showToast('Sign-in failed — enable Anonymous auth in Firebase', 'error');
-        return;
-      }
-
       const cleanNotes = notes.trim();
       await addDoc(collection(db, 'recipes'), {
         title: cleanTitle,
@@ -209,7 +203,7 @@ export default function RecipePage() {
         tags: [],
         // Omitted rather than stored as '' so `notes` stays absent when unused.
         ...(cleanNotes === '' ? {} : { notes: cleanNotes }),
-        createdBy: user.uid,
+        createdBy: SINGLE_USER,
         createdAt: serverTimestamp(),
       });
       resetForm();

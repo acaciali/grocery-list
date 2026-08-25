@@ -50,7 +50,7 @@ const LEADING_UNITS = new Set([
 /** Words that describe a thing without changing WHICH thing it is. */
 const DESCRIPTORS = new Set([
   'a', 'an', 'the', 'of', 'and',
-  'fresh', 'freshly', 'organic', 'raw', 'ripe',
+  'fresh', 'freshly', 'organic', 'raw', 'ripe', 'frozen', 'canned', 'dried',
   'large', 'small', 'medium', 'extra', 'jumbo',
   'whole', 'halved', 'chopped', 'diced', 'minced', 'sliced', 'shredded',
   'grated', 'crushed', 'peeled', 'trimmed', 'rinsed', 'drained',
