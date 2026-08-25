@@ -33,6 +33,11 @@ describe('normalizeKey', () => {
     ['1 onion, finely chopped', 'onion-finely'],
     ['freshly ground black pepper', 'ground-black-pepper'],
 
+    // Storage state is a descriptor, not identity -- a recipe's "peas" must match
+    // the freezer's "frozen peas". The state lives in category/location instead.
+    ['frozen peas', 'pea'],
+    ['canned tomatoes', 'tomato'],
+
     // Diacritics and trademark noise.
     ['Jalapeño peppers', 'jalapeno-pepper'],
   ];

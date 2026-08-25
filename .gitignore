@@ -16,3 +16,4 @@ functions/lib/
 # Local-only integration tests (need the Firebase emulator + a Java runtime)
 packages/shared/src/*.emulator.test.ts
 packages/shared/vitest.emulator.config.ts
+functions/.secret.local

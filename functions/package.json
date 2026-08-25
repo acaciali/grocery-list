@@ -7,15 +7,20 @@
     "node": "20"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/index.js --external:firebase-functions --external:firebase-admin --external:@anthropic-ai/sdk --external:zod",
     "typecheck": "tsc --noEmit",
-    "predeploy": "npm run build"
+    "predeploy": "npm run build",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "firebase-admin": "^13.0.0",
-    "firebase-functions": "^6.1.0"
+    "firebase-functions": "^6.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "esbuild": "^0.25.12",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.11"
   }
 }

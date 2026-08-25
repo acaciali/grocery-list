@@ -110,3 +110,28 @@ export interface UserPrefs {
   storeName?: string;
   zip?: string;
 }
+
+// --- Shelf photo analysis (Inventory bonus) ----------------------------------------------
+
+/**
+ * One item the vision model believes it saw on a shelf. A SUGGESTION, not a fact --
+ * candidates go to the review grid, never straight to Firestore.
+ */
+export interface ShelfCandidate {
+  /** Already normalized server-side, so the photo path matches every other path. */
+  key: ItemKey;
+  /** Generic name for matching ("black beans"), brand kept separate. */
+  name: string;
+  brand?: string | null;
+  category: Category;
+  /** 0-1. The review grid pre-checks high-confidence items only. */
+  confidence: number;
+  note?: string | null;
+}
+
+/** Response shape of POST /analyzeShelf. */
+export interface AnalyzeShelfResponse {
+  items: ShelfCandidate[];
+  /** The pinned model that produced the candidates, for traceability. */
+  model: string;
+}

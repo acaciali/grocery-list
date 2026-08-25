@@ -5,6 +5,8 @@
  */
 import { onRequest } from 'firebase-functions/v2/https';
 
+export { analyzeShelf } from './vision';
+
 /** Phase 0 hello world: proves the functions toolchain builds, emulates, and deploys. */
 export const ping = onRequest((req, res) => {
   res.json({ ok: true, from: 'functions', at: new Date().toISOString() });
