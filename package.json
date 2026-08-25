@@ -16,6 +16,7 @@
     "emulators": "firebase emulators:start --only firestore,auth,functions"
   },
   "devDependencies": {
+    "firebase-tools": "^15.28.1",
     "typescript": "^5.6.3"
   }
 }

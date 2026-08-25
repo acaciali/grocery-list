@@ -10,11 +10,21 @@
  * implements PantryStore and exporting that as `pantry` instead. No component changes --
  * nothing in the UI knows or cares which implementation it is talking to.
  *
- * The Firestore implementation is already written and typechecked in
- * `packages/shared/src/inventory.ts`. Its function signatures line up with this interface
- * one-to-one on purpose, so the adapter is a dozen lines of forwarding. That module is
+ * The Firestore implementation lives in `packages/shared/src/inventory.ts`. That module is
  * also where Grocery gets `has()` for I2 and Recipe gets `getAllKeys()` for I5, which is
  * why it lives in shared rather than here.
+ *
+ * The adapter is still small, but it is forwarding rather than a straight re-export --
+ * shared's API takes the uid from `currentUid()` instead of a parameter (call
+ * `ensureSignedIn()` first), and a few names differ:
+ *
+ *     subscribe   -> subscribeToInventory   (returns InventoryItem[]; synthesize `id`
+ *                                            as `${uid}__${key}`, as this stub does)
+ *     upsertMany  -> batchUpsertItems
+ *     deleteItem  -> removeItem
+ *
+ * `upsertItem`, `renameItem`, `has` and `getAllKeys` map by name. `loadSample`/`clearAll`
+ * are stub-only and have no Firestore counterpart.
  * ───────────────────────────────────────────────────────────────────────────────────────
  */
 import { Timestamp } from 'firebase/firestore';
