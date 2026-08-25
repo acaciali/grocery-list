@@ -15,26 +15,25 @@ const tabs = [
  * Shared across a StrictMode double-invoked effect. Without it, two concurrent calls
  * both see a null currentUser and sign in twice, creating a second anonymous uid whose
  * pantry and store prefs are silently orphaned.
+ *
+ * Sign-in deliberately does NOT gate the routes. The grocery list predates auth and its
+ * Firestore rules are open; blocking it on a sign-in that can fail (anonymous auth not
+ * enabled, network down) would regress an app someone actually uses.
  */
 let signInOnce: Promise<unknown> | null = null;
 
-type AuthState = 'pending' | 'ready' | 'failed';
-
 export default function App() {
-  const [authState, setAuthState] = useState<AuthState>('pending');
+  const [authFailed, setAuthFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     signInOnce ??= ensureSignedIn();
-    signInOnce.then(
-      () => !cancelled && setAuthState('ready'),
-      (err: unknown) => {
-        console.error('Anonymous sign-in failed', err);
-        // Let the next mount retry rather than caching the rejection forever.
-        signInOnce = null;
-        if (!cancelled) setAuthState('failed');
-      },
-    );
+    signInOnce.catch((err: unknown) => {
+      console.error('Anonymous sign-in failed', err);
+      // Let the next mount retry rather than caching the rejection forever.
+      signInOnce = null;
+      if (!cancelled) setAuthFailed(true);
+    });
     return () => {
       cancelled = true;
     };
@@ -64,27 +63,20 @@ export default function App() {
         </nav>
       </header>
       <main className="flex-1 pb-6">
-        {authState === 'pending' && (
-          <p role="status" className="py-12 text-center text-sm text-ink-soft">
-            Signing in…
+        {authFailed && (
+          <p
+            role="status"
+            className="mb-3 rounded-card border border-line bg-surface px-3 py-2 text-center text-xs text-ink-soft"
+          >
+            Signed out — your list still works, but saved preferences won&apos;t stick.
           </p>
         )}
-        {authState === 'failed' && (
-          <div className="rounded-card border border-line bg-surface p-6 text-center">
-            <p className="font-semibold text-warn">Couldn&apos;t sign in</p>
-            <p className="mt-1 text-sm text-ink-soft">
-              Your list needs a connection to load. Check your network and reload.
-            </p>
-          </div>
-        )}
-        {authState === 'ready' && (
-          <Routes>
-            <Route path="/" element={<Navigate to="/grocery" replace />} />
-            <Route path="/recipe" element={<RecipePage />} />
-            <Route path="/inventory" element={<InventoryPage />} />
-            <Route path="/grocery" element={<GroceryPage />} />
-          </Routes>
-        )}
+        <Routes>
+          <Route path="/" element={<Navigate to="/grocery" replace />} />
+          <Route path="/recipe" element={<RecipePage />} />
+          <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/grocery" element={<GroceryPage />} />
+        </Routes>
       </main>
     </div>
   );
