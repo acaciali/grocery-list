@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/*
+ * Shared theme -- the Phase 0 "agree on the Tailwind theme" starting point.
+ * Tokens extracted from the original vanilla style.css rather than re-picked.
+ */
+@theme {
+  --color-bg: #f5f3ee;
+  --color-surface: #ffffff;
+  --color-ink: #1d3557;
+  --color-ink-soft: #5a6b80;
+  --color-accent: #2a9d8f;
+  --color-warn: #e63946;
+  --color-line: #e3ddd1;
+  --radius-card: 14px;
+}
+
+body {
+  @apply bg-bg text-ink antialiased;
+}
