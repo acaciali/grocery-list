@@ -16,7 +16,7 @@ import {
   type Item,
   type Unit,
 } from '@grocery/shared';
-import { parseQuantity } from './quantity';
+import { parseQuantity, parseWholeNumber } from './quantity';
 
 /** One editable ingredient row. `rowId` is a React key only -- it is never persisted. */
 interface IngredientRow {
@@ -27,6 +27,27 @@ interface IngredientRow {
 }
 
 const STARTER_ROWS = 3;
+
+/**
+ * Servings and the three durations behave identically -- optional positive whole numbers
+ * -- so they're described once here and rendered in a loop. `field` is the Recipe field
+ * name, which keeps the form and the contract spelled the same way.
+ */
+const COUNT_FIELDS = [
+  { field: 'servings', label: 'Servings', placeholder: '4' },
+  { field: 'totalMinutes', label: 'Total time (min)', placeholder: '45' },
+  { field: 'prepMinutes', label: 'Prep time (min)', placeholder: '15' },
+  { field: 'cookMinutes', label: 'Cook time (min)', placeholder: '30' },
+] as const;
+
+type CountField = (typeof COUNT_FIELDS)[number]['field'];
+
+const BLANK_COUNTS: Record<CountField, string> = {
+  servings: '',
+  totalMinutes: '',
+  prepMinutes: '',
+  cookMinutes: '',
+};
 
 function blankRow(rowId: number): IngredientRow {
   return { rowId, amount: '', unit: '', name: '' };
@@ -39,6 +60,7 @@ function starterRows(firstId: number): IngredientRow[] {
 export default function RecipePage() {
   const nextRowId = useRef(STARTER_ROWS);
   const [title, setTitle] = useState('');
+  const [counts, setCounts] = useState<Record<CountField, string>>(BLANK_COUNTS);
   const [rows, setRows] = useState<IngredientRow[]>(() => starterRows(0));
   const [instructions, setInstructions] = useState('');
   const [notes, setNotes] = useState('');
@@ -78,6 +100,7 @@ export default function RecipePage() {
     const firstId = nextRowId.current;
     nextRowId.current += STARTER_ROWS;
     setTitle('');
+    setCounts(BLANK_COUNTS);
     setRows(starterRows(firstId));
     setInstructions('');
     setNotes('');
@@ -121,6 +144,22 @@ export default function RecipePage() {
     return { ok: true, items };
   }
 
+  /**
+   * Blank means "not stated", so it's omitted from the document rather than written as
+   * null -- an absent field reads as unknown, where null reads as deliberately zero.
+   */
+  function collectCounts():
+    | { ok: true; values: Partial<Record<CountField, number>> }
+    | { ok: false; msg: string } {
+    const values: Partial<Record<CountField, number>> = {};
+    for (const { field, label } of COUNT_FIELDS) {
+      const parsed = parseWholeNumber(counts[field]);
+      if (!parsed.ok) return { ok: false, msg: `${label} is ${parsed.reason}` };
+      if (parsed.value !== null) values[field] = parsed.value;
+    }
+    return { ok: true, values };
+  }
+
   async function saveRecipe(e: FormEvent) {
     e.preventDefault();
 
@@ -133,6 +172,12 @@ export default function RecipePage() {
     const ingredients = collectIngredients();
     if (!ingredients.ok) {
       showToast(ingredients.msg, 'error');
+      return;
+    }
+
+    const countFields = collectCounts();
+    if (!countFields.ok) {
+      showToast(countFields.msg, 'error');
       return;
     }
 
@@ -158,6 +203,7 @@ export default function RecipePage() {
       const cleanNotes = notes.trim();
       await addDoc(collection(db, 'recipes'), {
         title: cleanTitle,
+        ...countFields.values,
         ingredients: ingredients.items,
         steps,
         tags: [],
@@ -194,6 +240,33 @@ export default function RecipePage() {
             placeholder="Sunday chili"
             className={fieldClass}
           />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {COUNT_FIELDS.map(({ field, label, placeholder }) => (
+            <div key={field} className="space-y-1.5">
+              <label htmlFor={`recipe-${field}`} className={labelClass}>
+                {label}
+              </label>
+              <input
+                id={`recipe-${field}`}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                value={counts[field]}
+                onChange={(e) =>
+                  setCounts((current) => ({ ...current, [field]: e.target.value }))
+                }
+                placeholder={placeholder}
+                className={fieldClass}
+              />
+            </div>
+          ))}
+          <p className="col-span-2 -mt-1 text-xs text-ink-soft">
+            All four are optional. Total time is stored as you enter it, not as prep + cook —
+            resting and marinating live in the gap.
+          </p>
         </div>
 
         <fieldset className="space-y-2">

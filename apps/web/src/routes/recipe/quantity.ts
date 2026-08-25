@@ -1,6 +1,6 @@
 /**
- * Cooks type "1 1/2" and recipe sites emit "1½", but the Item contract wants
- * `quantity?: number | null`. This is the one conversion between the two.
+ * Text-field → contract-number parsing for the recipe form. Cooks type "1 1/2" and recipe
+ * sites emit "1½", but `Item.quantity` and the minute fields want plain numbers.
  *
  * Lives in routes/recipe/ rather than packages/shared because only the recipe form needs
  * it today. Promote it to shared if the import path or Inventory ends up wanting it too.
@@ -66,4 +66,19 @@ export function parseQuantity(raw: string): QuantityResult {
   }
 
   return { ok: false, reason: 'not a number' };
+}
+
+/**
+ * For servings and the minute fields, which are counts rather than measurements: a
+ * positive whole number, or blank for "not stated". Fractions are rejected here on
+ * purpose -- half a minute of prep time is noise, not information.
+ */
+export function parseWholeNumber(raw: string): QuantityResult {
+  const text = raw.trim();
+  if (text === '') return { ok: true, value: null };
+  if (!/^\d+$/.test(text)) return { ok: false, reason: 'not a whole number' };
+
+  const value = Number(text);
+  if (value < 1) return { ok: false, reason: 'must be at least 1' };
+  return { ok: true, value };
 }

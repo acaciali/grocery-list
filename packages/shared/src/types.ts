@@ -105,6 +105,16 @@ export interface Recipe {
   sourceUrl?: string;
   imageUrl?: string;
   servings?: number;
+  /**
+   * Durations in whole minutes. Stored as numbers rather than schema.org's ISO 8601
+   * strings ("PT1H15M") so they sort and add without re-parsing; the import path converts.
+   *
+   * `totalMinutes` is its own field, not `prep + cook` -- resting, marinating and chilling
+   * live in the gap, so deriving it would understate a lot of real recipes.
+   */
+  prepMinutes?: number;
+  cookMinutes?: number;
+  totalMinutes?: number;
   ingredients: Item[];
   steps: string[];
   tags: string[];
