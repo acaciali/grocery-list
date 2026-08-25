@@ -20,12 +20,10 @@ const mocks = vi.hoisted(() => ({
   >(async () => ({ docs: [] })),
   onSnapshot: vi.fn<(...args: unknown[]) => () => void>(() => () => {}),
   commits: [] as Array<Array<{ path: string; data: Record<string, unknown> }>>,
-  currentUid: vi.fn<() => string>(() => 'user-1'),
 }));
 
 vi.mock('./firebase.js', () => ({
   db: { __mock: 'db' },
-  currentUid: mocks.currentUid,
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -75,7 +73,6 @@ const milk = (overrides: Partial<InventoryItemInput> = {}): InventoryItemInput =
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.commits.length = 0;
-  mocks.currentUid.mockReturnValue('user-1');
 });
 
 describe('upsertItem', () => {
@@ -84,11 +81,11 @@ describe('upsertItem', () => {
     expect(key).toBe('milk');
   });
 
-  it('writes to the deterministic doc ID uid__key with merge', async () => {
+  it('writes to the deterministic doc ID the key with merge', async () => {
     await upsertItem(milk());
     expect(mocks.setDoc).toHaveBeenCalledWith(
-      { path: 'inventory/user-1__milk' },
-      expect.objectContaining({ key: 'milk', userId: 'user-1', updatedAt: SERVER_TS }),
+      { path: 'inventory/milk' },
+      expect.objectContaining({ key: 'milk', updatedAt: SERVER_TS }),
       { merge: true },
     );
   });
@@ -96,7 +93,7 @@ describe('upsertItem', () => {
   it('prefers a caller-supplied key over deriving one', async () => {
     const key = await upsertItem(milk({ key: asItemKey('oat-milk') }));
     expect(key).toBe('oat-milk');
-    expect(mocks.setDoc.mock.calls[0]?.[0]).toEqual({ path: 'inventory/user-1__oat-milk' });
+    expect(mocks.setDoc.mock.calls[0]?.[0]).toEqual({ path: 'inventory/oat-milk' });
   });
 
   it('strips undefined fields so a merge cannot blank untouched data', async () => {
@@ -117,13 +114,6 @@ describe('upsertItem', () => {
     expect(mocks.setDoc.mock.calls[0]?.[1]).toMatchObject({ quantity: 2, unit: 'l' });
   });
 
-  it('throws when signed out, before any write', async () => {
-    mocks.currentUid.mockImplementation(() => {
-      throw new Error('Not signed in');
-    });
-    await expect(upsertItem(milk())).rejects.toThrow(/Not signed in/);
-    expect(mocks.setDoc).not.toHaveBeenCalled();
-  });
 });
 
 describe('batchUpsertItems', () => {
@@ -156,17 +146,17 @@ describe('updateItem', () => {
   it('merges only defined patch fields plus a fresh updatedAt', async () => {
     await updateItem(normalizeKey('milk'), { quantity: 2, unit: undefined });
     const [ref, data, opts] = mocks.setDoc.mock.calls[0] ?? [];
-    expect(ref).toEqual({ path: 'inventory/user-1__milk' });
+    expect(ref).toEqual({ path: 'inventory/milk' });
     expect(data).toEqual({ quantity: 2, updatedAt: SERVER_TS });
     expect(opts).toEqual({ merge: true });
   });
 });
 
 describe('reads', () => {
-  it('has() does a single doc lookup at uid__key', async () => {
+  it('has() does a single doc lookup at the key', async () => {
     mocks.getDoc.mockResolvedValueOnce({ exists: () => true });
     expect(await has(normalizeKey('milk'))).toBe(true);
-    expect(mocks.getDoc).toHaveBeenCalledWith({ path: 'inventory/user-1__milk' });
+    expect(mocks.getDoc).toHaveBeenCalledWith({ path: 'inventory/milk' });
   });
 
   it('hasMany de-dupes input keys and answers every one', async () => {
@@ -182,13 +172,12 @@ describe('reads', () => {
     expect(result).toEqual({ milk: true, saffron: false });
   });
 
-  it('getAllKeys queries scoped to the current user -- the rules reject anything else', async () => {
+  it('getAllKeys returns every pantry key', async () => {
     mocks.getDocs.mockResolvedValueOnce({
       docs: [{ data: () => ({ key: 'milk' }) }, { data: () => ({ key: 'black-bean' }) }],
     });
     expect(await getAllKeys()).toEqual(['milk', 'black-bean']);
-    const q = mocks.getDocs.mock.calls[0]?.[0] as { constraints: unknown[] };
-    expect(q.constraints).toContainEqual({ field: 'userId', op: '==', value: 'user-1' });
+    expect(mocks.getDocs).toHaveBeenCalledWith({ __collection: 'inventory' });
   });
 });
 
@@ -197,49 +186,36 @@ describe('coverage parity with the local emulator suite', () => {
     await upsertItem(milk({ name: 'Whole Milk' }));
     await upsertItem(milk({ name: '2 cups whole milk' })); // a recipe line, same key
     const paths = mocks.setDoc.mock.calls.map((c) => (c[0] as { path: string }).path);
-    expect(paths).toEqual(['inventory/user-1__milk', 'inventory/user-1__milk']);
+    expect(paths).toEqual(['inventory/milk', 'inventory/milk']);
   });
 
   it('cross-app key matching: recipe, pantry, and lookup all land on one key', async () => {
     expect(normalizeKey('2 cups whole milk')).toBe(normalizeKey('Whole Milk'));
     await has(normalizeKey('2 cups whole milk'));
-    expect(mocks.getDoc).toHaveBeenCalledWith({ path: 'inventory/user-1__milk' });
+    expect(mocks.getDoc).toHaveBeenCalledWith({ path: 'inventory/milk' });
   });
 
   it('removeItem deletes the deterministic doc', async () => {
     await removeItem(normalizeKey('milk'));
-    expect(mocks.deleteDoc).toHaveBeenCalledWith({ path: 'inventory/user-1__milk' });
+    expect(mocks.deleteDoc).toHaveBeenCalledWith({ path: 'inventory/milk' });
   });
 
-  it('read APIs also refuse when signed out, before any network call', async () => {
-    mocks.currentUid.mockImplementation(() => {
-      throw new Error('Not signed in');
-    });
-    await expect(has(normalizeKey('milk'))).rejects.toThrow(/Not signed in/);
-    await expect(getAllKeys()).rejects.toThrow(/Not signed in/);
-    await expect(listItems()).rejects.toThrow(/Not signed in/);
-    expect(mocks.getDoc).not.toHaveBeenCalled();
-    expect(mocks.getDocs).not.toHaveBeenCalled();
-  });
 
-  it('listItems maps documents through the user-scoped query', async () => {
+  it('listItems maps documents from the inventory collection', async () => {
     mocks.getDocs.mockResolvedValueOnce({
       docs: [{ data: () => ({ key: 'milk', name: 'Whole Milk' }) }],
     });
     const items = await listItems();
     expect(items).toEqual([{ key: 'milk', name: 'Whole Milk' }]);
-    const q = mocks.getDocs.mock.calls[0]?.[0] as { constraints: unknown[] };
-    expect(q.constraints).toContainEqual({ field: 'userId', op: '==', value: 'user-1' });
+    expect(mocks.getDocs).toHaveBeenCalledWith({ __collection: 'inventory' });
   });
 
-  it('subscribeToInventory scopes to the user, maps with estimated timestamps, and returns unsubscribe', () => {
+  it('subscribeToInventory maps snapshots with estimated timestamps and returns unsubscribe', () => {
     const received: unknown[][] = [];
     const unsubscribe = subscribeToInventory((items) => received.push(items));
 
     const [q, listener] = mocks.onSnapshot.mock.calls[0] ?? [];
-    expect((q as { constraints: unknown[] }).constraints).toContainEqual({
-      field: 'userId', op: '==', value: 'user-1',
-    });
+    expect(q).toEqual({ __collection: 'inventory' });
 
     // Simulate a snapshot arriving and capture the data() options.
     const seenOpts: unknown[] = [];

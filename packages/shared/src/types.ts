@@ -47,11 +47,6 @@ export type AddedVia = 'manual' | 'photo' | 'barcode' | 'grocery';
  */
 export interface InventoryItem {
   key: ItemKey;
-  /**
-   * Added by the Inventory team for per-user security rules (anonymous auth).
-   * Additive to the CLAUDE.md contract -- announced, nothing else changed.
-   */
-  userId: string;
   name: string;
   category: Category;
   location: StorageLocation;
@@ -67,10 +62,10 @@ export interface InventoryItem {
 
 /**
  * What a caller supplies to the inventory data layer.
- * `key` is derived from `name` when omitted; `userId` and `updatedAt` are set by the layer.
+ * `key` is derived from `name` when omitted; `updatedAt` is set by the layer.
  */
 export type InventoryItemInput =
-  Omit<InventoryItem, 'key' | 'userId' | 'updatedAt'> & { key?: ItemKey };
+  Omit<InventoryItem, 'key' | 'updatedAt'> & { key?: ItemKey };
 
 // --- Grocery ---------------------------------------------------------------------------
 
