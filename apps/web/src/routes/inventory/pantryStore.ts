@@ -302,6 +302,31 @@ function normalizeConfidence(input: InventoryItemInput): InventoryItemInput {
   };
 }
 
+/**
+ * Firebase auth failures all surface as one opaque "couldn't sign in", but the causes are
+ * distinct one-time setup steps and the error code says which. Naming the step beats
+ * making someone open the console and decode `auth/operation-not-allowed` themselves.
+ */
+function authErrorMessage(err: unknown): string {
+  const code = typeof err === 'object' && err !== null && 'code' in err
+    ? String((err as { code: unknown }).code)
+    : '';
+
+  switch (code) {
+    case 'auth/operation-not-allowed':
+      return 'Anonymous sign-in is turned off for this Firebase project. Turn it on under Authentication → Sign-in method → Anonymous (docs/SETUP.md, step 6).';
+    case 'auth/configuration-not-found':
+      return 'This Firebase project has no Authentication set up yet. Open Authentication in the console, click Get started, then enable Anonymous sign-in (docs/SETUP.md, step 6).';
+    case 'auth/invalid-api-key':
+    case 'auth/api-key-not-valid':
+      return 'The apiKey in packages/shared/src/firebase-config.ts is not valid for this project (docs/SETUP.md, step 3).';
+    case 'auth/network-request-failed':
+      return 'Could not reach Firebase. If VITE_USE_EMULATORS=true, check that `npm run emulators` is actually running.';
+    default:
+      return `Couldn't sign in${code ? ` (${code})` : ''}. The browser console has the full error.`;
+  }
+}
+
 /** The doc id shared writes to. Derivable, so no extra read to learn it. */
 function rowId(uid: string, key: ItemKey): string {
   return `${uid}__${key}`;
@@ -314,8 +339,14 @@ const firestorePantry: PantryStore = {
     // Anonymous auth: a stable uid per browser, no account, no password. Every other
     // method here reads that uid back out of the SDK via currentUid(), so this must
     // resolve before any of them are called.
-    const user = await ensureSignedIn();
-    return user.uid;
+    try {
+      const user = await ensureSignedIn();
+      return user.uid;
+    } catch (err) {
+      console.error('[pantry] sign-in failed', err);
+      // Rethrown with a message the UI can show as-is; useInventory renders it verbatim.
+      throw new Error(authErrorMessage(err));
+    }
   },
 
   subscribe(uid, onRows, onError) {

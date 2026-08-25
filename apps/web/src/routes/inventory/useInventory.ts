@@ -48,9 +48,13 @@ export function useInventory(): UseInventory {
       } catch (err) {
         console.error(err);
         if (cancelled) return;
-        // Thrown by ensureSignedIn(): anonymous sign-in is off, or the browser is
-        // blocking the storage the SDK persists its session in.
-        setError("Couldn't sign in, so your pantry didn't load.");
+        // The store already translated this into something worth reading (which setup
+        // step is missing, usually), so show that rather than flattening it again.
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't sign in, so your pantry didn't load.",
+        );
         setLoading(false);
       }
     })();
