@@ -37,40 +37,66 @@ day, and they are the part that requires two teams to agree.
 **Nobody starts feature work until this is done.** It is a few hours of work and it
 prevents days of rework. Do it together, in one room or one call.
 
+> **Status: mostly done — 4 items left, and 2 of them block a real demo.** The scaffold,
+> the port, and the contract all landed. What did not: publishing the rules, deploying a
+> function, a fully runnable emulator suite, and the normalizeKey all-hands. Do not assume
+> the unchecked boxes below are someone else's problem — they are the ones that bite.
+
 ### Project + data
-- [ ] Create a fresh Firebase project; Firestore in test mode is fine to start
+- [x] Create a fresh Firebase project; Firestore in test mode is fine to start
+      *(`grocery-list-3dd86`)*
 - [ ] Enable Firebase Auth (anonymous or Google — needed for `users/{uid}` and Kroger linking)
-- [ ] Publish `firestore.rules`; export the existing `groceries` data if we want to keep it
+      — ⚠️ **unconfirmed.** `ensureSignedIn()` is wired up and called from `App.tsx`, but
+      nobody has verified anonymous auth is switched on in the console. Grocery's store
+      picker silently won't persist until it is.
+- [ ] Publish `firestore.rules` — ⚠️ **not done.** The file is written and covers the new
+      collections (`storeProducts`, `users/{uid}/productPrefs`, `users/{uid}/private/**`
+      deny, `cartBatches`), but prod still has the original open-`groceries` rules.
 
 ### Scaffold the stack
-- [ ] npm workspaces monorepo: `packages/shared`, `apps/web`, `functions`
-- [ ] `apps/web` — Vite + React + TypeScript + Tailwind, three empty routes and a nav
-- [ ] `functions` — Firebase Functions in TypeScript, one deployed hello-world endpoint
-- [ ] `packages/shared` wired into both, with `npm run typecheck` green
-- [ ] `.gitignore` for `.env`, `node_modules`, `.firebase`, `dist`
-- [ ] Firebase emulator suite running locally so nobody develops against prod
+- [x] npm workspaces monorepo: `packages/shared`, `apps/web`, `functions`
+- [x] `apps/web` — Vite + React + TypeScript + Tailwind, three empty routes and a nav
+- [x] `functions` — Firebase Functions in TypeScript *(built by Grocery, who needed it
+      first; root `package.json` had already declared the workspace)*. ⚠️ **Nothing has
+      been deployed** — everything so far runs in the emulator only.
+- [x] `packages/shared` wired into both, with `npm run typecheck` green
+- [x] `.gitignore` for `.env`, `node_modules`, `.firebase`, `dist`
+- [ ] Firebase emulator suite running locally — ⚠️ **partial.** The Functions emulator
+      runs. Firestore and Auth need a JRE, which is not installed:
+      `brew install --cask temurin`. Also `firebase login` has not been run.
 
 ### Port the existing app
-- [ ] Move the current grocery list into `apps/web/src/routes/grocery/` as React + TS
-- [ ] Verify add / check off / delete / clear-checked / live sync all still work
-- [ ] ~150 lines total. Half a day. **Do it now, not in Phase 2.**
+- [x] Move the current grocery list into `apps/web/src/routes/grocery/` as React + TS
+- [x] Verify add / check off / delete / clear-checked / live sync all still work
+- [x] ~150 lines total. Half a day. **Do it now, not in Phase 2.**
 
 ### ⭐ Write the contract, together
-- [ ] `packages/shared/src/types.ts` — `Item`, `Recipe`, `InventoryItem`, `GroceryItem`,
-      `Unit`, `Category`, branded `ItemKey`
-- [ ] `packages/shared/src/items.ts` — `normalizeKey()`, `parseIngredientLine()`
+- [x] `packages/shared/src/types.ts` — `Item`, `Recipe`, `InventoryItem`, `GroceryItem`,
+      `Unit`, `Category`, branded `ItemKey`. *Grocery added `MatchStatus`, `StoreProduct`,
+      `StoreMatch`, `StoreLocation`, `match?` on `GroceryItem`, and five grocery `Unit`
+      values — all additive.*
+- [ ] `packages/shared/src/items.ts` — `normalizeKey()` ✅ / `parseIngredientLine()` ⚠️
+      **does not exist.** Nothing calls it yet because nobody has needed it, but Recipe
+      import will the moment it starts. Grocery wrote its own local list-entry parser
+      rather than guess at the shared one's contract.
 - [ ] Whiteboard 15 real ingredient strings and agree on what each normalizes to.
       *This conversation is the single highest-leverage hour of the project.*
-- [ ] Agree on the Tailwind theme (colors, spacing, type scale) so three surfaces look
-      like one app
+      — ⚠️ **still not done, and there is now evidence it matters.** Five skipped tests in
+      `items.test.ts` hold the open questions, including two collisions Grocery hit for
+      real: `whole milk` and `2% milk` both normalize to `milk`, and `a dozen eggs` →
+      `dozen-egg` while `eggs` → `egg`. Both break I1 de-dupe and I2 `has(key)`.
+- [x] Agree on the Tailwind theme (colors, spacing, type scale) so three surfaces look
+      like one app *(tokens in `apps/web/src/index.css`, ported from the original CSS)*
 
 ### Unblock the long poles
-- [ ] Register a Kroger developer account — **day one**, approval is not instant and it
-      gates the Grocery MVP
+- [x] Register a Kroger developer account — **credentials in hand.** Not yet exercised
+      against the live API; everything so far runs on `MockStore`.
 - [ ] Get an Anthropic API key into Functions config (Recipe AI + Inventory vision)
 
 **Exit criteria:** every teammate can clone, `npm install`, `npm run dev`, see the nav,
 add a grocery item that persists, and get a clean `npm run typecheck`.
+**Met, with one exception:** `npm run emulators` fails without a JRE, so "nobody develops
+against prod" is not true yet.
 
 ---
 
@@ -79,11 +105,11 @@ add a grocery item that persists, and get a clean `npm run typecheck`.
 Three teams, three folders, no blocking. Each team builds against `shared/items.js` and
 **stubs the other teams' pieces** rather than waiting on them.
 
-| Team | Ships by end of Phase 1 |
-|---|---|
-| Recipe | Paste a URL → parsed recipe saved and displayed. Manual recipe form works. |
-| Inventory | Add / edit / delete pantry items with quantity, unit, location. Grouped list. |
-| Grocery | Kroger store picker + product search. Existing list upgraded to the Item shape. |
+| Team | Ships by end of Phase 1 | Status |
+|---|---|---|
+| Recipe | Paste a URL → parsed recipe saved and displayed. Manual recipe form works. | ⬜ Not started — route is still a placeholder |
+| Inventory | Add / edit / delete pantry items with quantity, unit, location. Grouped list. | ⬜ Not started — route is still a placeholder |
+| Grocery | Kroger store picker + product search. Existing list upgraded to the Item shape. | ✅ Done, plus most of I3 |
 
 Full checklists: [recipe](./docs/todos/recipe.md) · [inventory](./docs/todos/inventory.md) · [grocery](./docs/todos/grocery.md)
 
@@ -108,9 +134,13 @@ Before adding, check `inventory` for each `key` via `has(key)`. Already own it? 
 and tell the user what was skipped, with an "add anyway" override. This is the feature
 that makes the app feel smart, and it is cheap once `key` is trustworthy.
 
-**I3 · Grocery → Kroger** *(Grocery)*
-Map list items to Kroger `productId` via search. Show the match and let the user correct
+**I3 · Grocery → Kroger** *(Grocery)* — ✅ **largely done ahead of schedule**
+Map list items to Kroger products via search. Show the match and let the user correct
 it — auto-matching groceries is genuinely hard and a confirm step is honest, not lazy.
+Built: type-ahead add, an eight-state `MatchStatus`, per-row match chips, a correction
+picker, aisle grouping, and a running price estimate. Left: the batch resolver for items
+that arrive from I1/I2 is written but **unverified**, and cart push is untouched.
+Note the endpoint table in CLAUDE.md is wrong — cart add takes `upc`, not `productId`.
 
 **I4 · Grocery → Inventory** *(Grocery + Inventory)*
 Checking an item off writes it into `inventory`. Closes the loop. Small change, huge
@@ -157,8 +187,10 @@ real data in it.
 
 | Risk | Why it bites | What we do |
 |---|---|---|
-| Kroger API approval is slow | Blocks the Grocery MVP entirely | Register day one. Build behind a `StoreAdapter` interface with a `MockStore` so the UI is testable without credentials. |
+| ~~Kroger API approval is slow~~ ✅ retired | — | Credentials are in hand. `StoreAdapter`/`MockStore` built anyway and still earns its keep for tests, offline dev, and `STORE_ADAPTER=mock` when Kroger is rate-limited mid-demo. |
 | Ingredient matching is fuzzy | "2 cups whole milk" vs "Whole Milk, Gallon" | One shared `normalizeKey`. Always show the match and let users correct it. |
+| 🔴 **`normalizeKey` collisions** | `whole milk` and `2% milk` both → `milk`; `a dozen eggs` → `dozen-egg` but `eggs` → `egg`. Different products sharing a key silently breaks I1 de-dupe and I2 `has(key)`, and any per-`key` memory serves the wrong product. | Found by Grocery, recorded as skipped tests in `items.test.ts`. Grocery's product caches key on **query text, not `ItemKey`** as a local workaround. The real fix needs the Phase 0 all-hands. |
+| 🔴 **Nothing is deployed** | Rules unpublished, no Function deployed, emulator suite incomplete. All easy to mistake for done. | See the Phase 0 status block. Two are one-liners; the JRE install unblocks the rest. |
 | Vision misidentifies shelf items | Bad pantry data silently breaks I2 and I5 | Mandatory review screen. Pre-check high-confidence only. Never auto-save. |
 | Three teams drift on schema | Integrations fail in Phase 2 | Shared TS types + branded `ItemKey` make drift a compile error. Plus the Phase 1 checkpoint. |
 | Merge conflicts in shared files | Constant, morale-killing | Route-folder ownership + Tailwind (no shared CSS to collide) + announce `packages/shared` edits. |
