@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node22 --outfile=lib/index.js --external:firebase-admin --external:firebase-functions",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "backfill": "esbuild src/scripts/backfill-keys.ts --bundle --platform=node --format=cjs --target=node22 --outfile=lib/backfill-keys.cjs --external:firebase-admin && node lib/backfill-keys.cjs"
   },
   "dependencies": {
     "@grocery/shared": "*",
@@ -18,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^22.9.0",
     "esbuild": "^0.24.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
   }
 }

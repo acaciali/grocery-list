@@ -29,6 +29,11 @@ function clientCredentials(): { id: string; secret: string } {
   return { id, secret };
 }
 
+/** The public half of the credentials -- safe to put in a browser-bound authorize URL. */
+export function clientId(): string {
+  return clientCredentials().id;
+}
+
 interface TokenResponse {
   access_token: string;
   expires_in: number;

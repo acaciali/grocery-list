@@ -138,8 +138,10 @@ that makes the app feel smart, and it is cheap once `key` is trustworthy.
 Map list items to Kroger products via search. Show the match and let the user correct
 it — auto-matching groceries is genuinely hard and a confirm step is honest, not lazy.
 Built: type-ahead add, an eight-state `MatchStatus`, per-row match chips, a correction
-picker, aisle grouping, and a running price estimate. Left: the batch resolver for items
-that arrive from I1/I2 is written but **unverified**, and cart push is untouched.
+picker, aisle grouping, and a running price estimate. The batch resolver for I1/I2 items
+is now **verified** (it was hanging on an unreachable Firestore, not crashing), and cart
+push — user OAuth plus `/addToCart` with a `cartBatches` mirror — is **built**. Left: none
+of it has run against the live Kroger API, and the frontend does not call the resolver yet.
 Note the endpoint table in CLAUDE.md is wrong — cart add takes `upc`, not `productId`.
 
 **I4 · Grocery → Inventory** *(Grocery + Inventory)*

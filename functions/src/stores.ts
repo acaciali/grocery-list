@@ -1,37 +1,9 @@
-import { onRequest, type Request } from 'firebase-functions/v2/https';
-import type { Response } from 'express';
+import { onRequest } from 'firebase-functions/v2/https';
 import type { StoreMatch, StoreProduct } from '@grocery/shared/types';
-import type { StoreAdapter } from './stores/adapter.js';
-import { KrogerStore } from './stores/kroger.js';
-import { MockStore } from './stores/mock.js';
+import { adapter } from './stores/select.js';
 import { readProductPref, readSearchCache, writeProductPref, writeSearchCache } from './stores/cache.js';
 import { toMatch } from './stores/matching.js';
-
-/**
- * MockStore unless real credentials are present, so a fresh clone demos with zero setup
- * and CI never talks to Kroger. STORE_ADAPTER=mock forces the mock even with creds --
- * useful when Kroger is down or rate-limited mid-demo.
- */
-function adapter(): StoreAdapter {
-  const forced = process.env.STORE_ADAPTER;
-  if (forced === 'mock') return new MockStore();
-  if (forced === 'kroger' || process.env.KROGER_CLIENT_ID) return new KrogerStore();
-  return new MockStore();
-}
-
-function fail(res: Response, err: unknown): void {
-  console.error(err);
-  const msg = err instanceof Error ? err.message : String(err);
-  // Config problems are the caller's to fix; upstream failures are 502.
-  res.status(msg.includes('not set') ? 500 : 502).json({ error: msg });
-}
-
-const requireParam = (req: Request, res: Response, name: string): string | null => {
-  const v = req.query[name];
-  if (typeof v === 'string' && v.length > 0) return v;
-  res.status(400).json({ error: `missing required query param: ${name}` });
-  return null;
-};
+import { fail, requireParam, requirePost } from './http.js';
 
 export const findStores = onRequest({ cors: true }, async (req, res) => {
   const zip = requireParam(req, res, 'zip');
@@ -81,10 +53,7 @@ interface ResolveRequestItem {
  * touch that input, so they land 'unresolved' and need resolving after the fact.
  */
 export const resolveItems = onRequest({ cors: true }, async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'POST only' });
-    return;
-  }
+  if (!requirePost(req, res)) return;
   const body = req.body as { locationId?: string; uid?: string; items?: ResolveRequestItem[] };
   const { locationId, uid } = body;
   const items = body.items ?? [];
@@ -132,10 +101,7 @@ export const resolveItems = onRequest({ cors: true }, async (req, res) => {
 
 /** Remember a user's correction so the same text resolves straight to it next time. */
 export const rememberChoice = onRequest({ cors: true }, async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'POST only' });
-    return;
-  }
+  if (!requirePost(req, res)) return;
   const { uid, term, product } = req.body as {
     uid?: string;
     term?: string;
