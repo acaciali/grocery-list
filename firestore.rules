@@ -12,5 +12,21 @@ service cloud.firestore {
     match /inventory/{id} {
       allow read, create, update, delete: if true;
     }
+
+    // One shared cookbook, like groceries and the pantry. Deliberately plain CRUD --
+    // no field validation here, the Recipe shape is enforced by TypeScript
+    // (packages/shared/src/types.ts).
+    //
+    // ⚠️ main had this as `if request.auth != null`, from when the app still had
+    // anonymous auth, AND a second permissive block for the same path alongside it.
+    // Auth is gone now (single-user POC), so the auth-gated block can never pass --
+    // recipes kept working only because Firestore ORs matching blocks and the second
+    // one allowed everything. Collapsed to the one block that describes what is
+    // actually enforced, so nobody later deletes the permissive half believing the
+    // auth half still covers it. Tighten all three collections together when auth
+    // comes back.
+    match /recipes/{id} {
+      allow read, create, update, delete: if true;
+    }
   }
 }

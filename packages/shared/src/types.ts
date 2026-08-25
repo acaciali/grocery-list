@@ -11,6 +11,15 @@ export type Unit =
   | 'g' | 'kg' | 'oz' | 'lb' | 'ml' | 'l'
   | 'tsp' | 'tbsp' | 'cup' | 'clove' | 'can' | 'pkg';
 
+/**
+ * The runtime companion to `Unit`, for populating unit dropdowns. Kept next to the type so
+ * the two cannot drift: the annotation makes an unlisted or misspelled unit a compile error.
+ */
+export const UNITS: readonly Unit[] = [
+  'g', 'kg', 'oz', 'lb', 'ml', 'l',
+  'tsp', 'tbsp', 'cup', 'clove', 'can', 'pkg',
+];
+
 export type Category =
   | 'produce' | 'dairy' | 'meat' | 'seafood' | 'bakery'
   | 'pantry' | 'canned' | 'frozen' | 'spices'
@@ -91,9 +100,21 @@ export interface Recipe {
   sourceUrl?: string;
   imageUrl?: string;
   servings?: number;
+  /**
+   * Durations in whole minutes. Stored as numbers rather than schema.org's ISO 8601
+   * strings ("PT1H15M") so they sort and add without re-parsing; the import path converts.
+   *
+   * `totalMinutes` is its own field, not `prep + cook` -- resting, marinating and chilling
+   * live in the gap, so deriving it would understate a lot of real recipes.
+   */
+  prepMinutes?: number;
+  cookMinutes?: number;
+  totalMinutes?: number;
   ingredients: Item[];
   steps: string[];
   tags: string[];
+  /** Free-form cook's notes: swaps, provenance, what to serve it with. */
+  notes?: string;
   createdBy: string;
   createdAt: Timestamp;
 }
