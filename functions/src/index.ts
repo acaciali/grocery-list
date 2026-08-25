@@ -9,3 +9,6 @@ import { onRequest } from 'firebase-functions/v2/https';
 export const ping = onRequest((req, res) => {
   res.json({ ok: true, from: 'functions', at: new Date().toISOString() });
 });
+
+// Inventory. analyzeShelf is currently a STUB returning canned detections -- see vision.ts.
+export { analyzeShelf } from './vision.js';
