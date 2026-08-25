@@ -13,6 +13,7 @@ import {
 } from '@grocery/shared';
 import { pantry } from './pantryStore';
 import { CATEGORIES, CATEGORY_LABEL, LOCATIONS, LOCATION_META, STAPLES, UNITS } from './constants';
+import { fromDateInputValue } from './dates';
 
 const field =
   'min-h-12 rounded-card border border-line bg-surface px-3 text-base outline-none focus:border-accent';
@@ -33,6 +34,7 @@ export default function AddItemForm({
   const [location, setLocation] = useState<StorageLocation>('pantry');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState<Unit | ''>('');
+  const [expires, setExpires] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -72,6 +74,7 @@ export default function AddItemForm({
     setName('');
     setQuantity('');
     setUnit('');
+    setExpires('');
 
     const parsedQuantity = Number.parseFloat(quantity);
     try {
@@ -82,6 +85,7 @@ export default function AddItemForm({
         addedVia: 'manual',
         quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
         unit: unit === '' ? null : unit,
+        expiresAt: fromDateInputValue(expires),
       });
       onAdded(existing ? `Updated ${trimmed}` : `Added ${trimmed}`);
     } catch (err) {
@@ -172,32 +176,44 @@ export default function AddItemForm({
         onClick={() => setShowDetails((v) => !v)}
         className="mt-2 text-xs font-semibold text-ink-soft hover:text-accent"
       >
-        {showDetails ? '− Hide quantity' : '+ Add a quantity (optional)'}
+        {showDetails ? '− Hide extras' : '+ Add a quantity or expiry date (optional)'}
       </button>
 
       {showDetails && (
-        <div className="mt-2 flex gap-2">
-          <input
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            inputMode="decimal"
-            placeholder="Qty"
-            aria-label="Quantity"
-            className={`${field} w-24`}
-          />
-          <select
-            value={unit}
-            onChange={(e) => setUnit(e.target.value as Unit | '')}
-            aria-label="Unit"
-            className={`${field} flex-1`}
-          >
-            <option value="">No unit</option>
-            {UNITS.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
+        <div className="mt-2 space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              inputMode="decimal"
+              placeholder="Qty"
+              aria-label="Quantity"
+              className={`${field} w-24`}
+            />
+            <select
+              value={unit}
+              onChange={(e) => setUnit(e.target.value as Unit | '')}
+              aria-label="Unit"
+              className={`${field} flex-1`}
+            >
+              <option value="">No unit</option>
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-ink-soft">
+            <span className="shrink-0">Expires</span>
+            <input
+              type="date"
+              value={expires}
+              onChange={(e) => setExpires(e.target.value)}
+              aria-label="Expiration date"
+              className={`${field} flex-1`}
+            />
+          </label>
         </div>
       )}
 

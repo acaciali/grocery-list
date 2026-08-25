@@ -3,8 +3,9 @@
  * people actually restock -- you stand in front of one door at a time.
  */
 import { useState } from 'react';
-import type { Category, InventoryRow, StorageLocation } from '@grocery/shared';
+import type { Category, InventoryRow, StorageLocation, Unit } from '@grocery/shared';
 import { pantry } from './pantryStore';
+import { describeExpiry, fromDateInputValue, toDateInputValue } from './dates';
 import {
   ADDED_VIA_META,
   CATEGORIES,
@@ -12,6 +13,7 @@ import {
   LOCATIONS,
   LOCATION_META,
   HIGH_CONFIDENCE,
+  UNITS,
 } from './constants';
 
 const field =
@@ -103,6 +105,8 @@ function Row({
   }
 
   const via = ADDED_VIA_META[row.addedVia];
+  // Tracking an expiry date is only worth doing if the list actually tells you about it.
+  const expiry = describeExpiry(row.expiresAt);
   // A photo guess we accepted below the pre-check bar is worth flagging for as long as it
   // lives, not just in the review grid -- it's the row most likely to be wrong.
   const lowConfidence =
@@ -129,6 +133,15 @@ function Row({
             {via.emoji}
           </span>
           <span className="sr-only">{via.label}</span>
+          {expiry && (
+            <span
+              className={`rounded-full px-1.5 ${
+                expiry.urgent ? 'bg-warn/10 font-semibold text-warn' : 'bg-line/60'
+              }`}
+            >
+              {expiry.label}
+            </span>
+          )}
           {lowConfidence && (
             <span className="rounded-full bg-warn/10 px-1.5 text-warn">
               low confidence · double-check
@@ -194,23 +207,31 @@ function EditRow({
   const [name, setName] = useState(row.name);
   const [category, setCategory] = useState<Category>(row.category);
   const [location, setLocation] = useState<StorageLocation>(row.location);
+  const [quantity, setQuantity] = useState(row.quantity == null ? '' : String(row.quantity));
+  const [unit, setUnit] = useState<Unit | ''>(row.unit ?? '');
+  const [expires, setExpires] = useState(toDateInputValue(row.expiresAt));
   const [busy, setBusy] = useState(false);
 
   async function save() {
     const trimmed = name.trim();
     if (!trimmed || busy) return;
     setBusy(true);
+    const parsedQuantity = Number.parseFloat(quantity);
     try {
       // renameItem handles both cases: an unchanged name is a plain upsert, a changed one
       // is a move to a new document id, because the id is derived from the key.
+      //
+      // Every optional is passed explicitly, null included -- an emptied field has to
+      // clear the stored value, and only an explicit null does that.
       await pantry.renameItem(uid, row.key, {
         name: trimmed,
         category,
         location,
         // An edited row has been vouched for by a human, so it stops being a photo guess.
         addedVia: row.addedVia === 'photo' ? 'manual' : row.addedVia,
-        quantity: row.quantity ?? null,
-        unit: row.unit ?? null,
+        quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
+        unit: unit === '' ? null : unit,
+        expiresAt: fromDateInputValue(expires),
         upc: row.upc ?? null,
       });
       onDone(`Saved ${trimmed}`);
@@ -256,6 +277,49 @@ function EditRow({
           ))}
         </select>
       </div>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+          inputMode="decimal"
+          placeholder="Qty"
+          aria-label="Quantity"
+          className={`${field} w-24`}
+        />
+        <select
+          value={unit}
+          onChange={(e) => setUnit(e.target.value as Unit | '')}
+          aria-label="Unit"
+          className={`${field} flex-1`}
+        >
+          <option value="">No unit</option>
+          {UNITS.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+      </div>
+      <label className="mt-2 flex items-center gap-2 text-sm text-ink-soft">
+        <span className="shrink-0">Expires</span>
+        <input
+          type="date"
+          value={expires}
+          onChange={(e) => setExpires(e.target.value)}
+          aria-label="Expiration date"
+          className={`${field} flex-1`}
+        />
+        {expires && (
+          <button
+            type="button"
+            onClick={() => setExpires('')}
+            className="shrink-0 px-1 text-xs underline hover:text-warn"
+          >
+            Clear
+          </button>
+        )}
+      </label>
+
       <div className="mt-2 flex gap-2">
         <button
           type="button"

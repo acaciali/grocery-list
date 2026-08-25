@@ -53,9 +53,12 @@ const STORAGE_KEY = 'kitchenloop.pantry.v1';
 const SEEDED_KEY = 'kitchenloop.pantry.seeded';
 const LOCAL_UID = 'local';
 
-/** Stored shape: same as InventoryItem but with a plain number for the timestamp, since
- *  a Firestore Timestamp does not survive JSON.stringify. */
-type StoredItem = Omit<InventoryItem, 'updatedAt' | 'expiresAt'> & { updatedAt: number };
+/** Stored shape: same as InventoryItem, but timestamps become epoch millis because a
+ *  Firestore Timestamp does not survive JSON.stringify. */
+type StoredItem = Omit<InventoryItem, 'updatedAt' | 'expiresAt'> & {
+  updatedAt: number;
+  expiresAt?: number | null;
+};
 
 function readAll(): StoredItem[] {
   try {
@@ -92,24 +95,38 @@ function toRow(item: StoredItem): InventoryRow {
     // initialized app. Using the real type keeps InventoryRow honest so components stay
     // backend-blind and the swap changes nothing.
     updatedAt: Timestamp.fromMillis(item.updatedAt),
+    expiresAt: item.expiresAt == null ? null : Timestamp.fromMillis(item.expiresAt),
   };
 }
 
 function toStored(input: InventoryItemInput): StoredItem {
   const key = input.key ?? normalizeKey(input.name);
-  return {
+  const stored: StoredItem = {
     key,
     userId: LOCAL_UID,
     name: input.name.trim(),
     category: input.category,
     location: input.location,
     addedVia: input.addedVia,
+    // Deliberately cleared when the row is not a photo guess: a human editing a row is
+    // vouching for it, so a stale confidence score must not linger.
     confidence: input.addedVia === 'photo' ? (input.confidence ?? null) : null,
-    quantity: input.quantity ?? null,
-    unit: input.unit ?? null,
-    upc: input.upc ?? null,
     updatedAt: Date.now(),
   };
+
+  // ⭐ Only write optionals the caller actually supplied. An absent field is left alone by
+  // the merge in putByKey, while an explicit `null` clears it -- which is exactly what
+  // Firestore's `merge: true` does, so both backends behave identically. Concretely:
+  // tapping the "Milk" staple must not wipe the expiry date you typed in earlier, but
+  // clearing the date field in the edit form must.
+  if (input.quantity !== undefined) stored.quantity = input.quantity;
+  if (input.unit !== undefined) stored.unit = input.unit;
+  if (input.upc !== undefined) stored.upc = input.upc;
+  if (input.expiresAt !== undefined) {
+    stored.expiresAt = input.expiresAt === null ? null : input.expiresAt.toMillis();
+  }
+
+  return stored;
 }
 
 /**
