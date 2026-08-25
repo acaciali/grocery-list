@@ -1,0 +1,148 @@
+# Set up Kitchen Loop with your own Firebase project
+
+This guide shows you how to run this app for your own use. You create
+your own free Firebase project. Your data stays in your project,
+under your control. The app needs no server of its own.
+
+Time estimate: 20 to 30 minutes.
+
+## What you need
+
+- A Google account (for Firebase).
+- [Node.js](https://nodejs.org) version 22 or later, which includes `npm`.
+- Git, and a GitHub account if you want the optional web deployment.
+
+## Step 1: Get the code
+
+1. Fork this repository on GitHub, or clone it directly:
+
+   ```sh
+   git clone https://github.com/acaciali/grocery-list.git
+   cd grocery-list
+   ```
+
+2. Install the dependencies:
+
+   ```sh
+   npm ci
+   ```
+
+## Step 2: Create a Firebase project
+
+1. Open the [Firebase console](https://console.firebase.google.com).
+2. Click **Create a project** and give it a name, for example `our-kitchen`.
+3. When the wizard offers Google Analytics, turn it off. The app does not use it.
+4. Wait for the project to be created, then click **Continue**.
+
+## Step 3: Register a web app and copy its config
+
+1. On the project overview page, click the web icon (`</>`) to add a web app.
+2. Give it a nickname, for example `kitchen-loop`. Do not select Firebase Hosting.
+3. Click **Register app**. The console shows a code snippet that contains a
+   `firebaseConfig` object.
+4. Copy only the values of that object into
+   `packages/shared/src/firebase-config.ts`, in place of the values that are
+   there now. Keep the `export const firebaseConfig = { ... }` wrapper.
+   You can remove the `measurementId` line if the console shows one.
+
+The result looks like this, with your own values:
+
+```ts
+export const firebaseConfig = {
+  apiKey: '...',
+  authDomain: 'our-kitchen.firebaseapp.com',
+  projectId: 'our-kitchen',
+  storageBucket: 'our-kitchen.firebasestorage.app',
+  messagingSenderId: '...',
+  appId: '...',
+};
+```
+
+These values are project identifiers, not secrets. It is safe to commit them.
+Access control comes from the security rules in Step 5.
+
+## Step 4: Create the Firestore database
+
+1. In the console sidebar, open **Build → Firestore Database**.
+2. Click **Create database**.
+3. Select a location near you. You cannot change the location later.
+4. Select **production mode**. Step 5 replaces the rules anyway, and
+   production mode is the safe default if you stop here.
+
+## Step 5: Publish the security rules
+
+1. In **Firestore Database**, open the **Rules** tab.
+2. Replace the full contents of the editor with the contents of
+   [`firestore.rules`](../firestore.rules) from this repository.
+3. Click **Publish**.
+
+Warning: do not skip this step. Without these rules, every read and write
+from the app is rejected, and the app shows permission errors.
+
+## Step 6: Enable anonymous sign-in
+
+The pantry feature stores data per user and needs a signed-in user.
+The app signs each device in anonymously, with no account or password.
+
+1. In the console sidebar, open **Build → Authentication**.
+2. Click **Get started**.
+3. Open the **Sign-in method** tab.
+4. Select **Anonymous**, turn on **Enable**, and click **Save**.
+
+Note: an anonymous user is tied to the browser storage of one device.
+If you clear site data or use a private window, that device gets a new,
+empty pantry. The grocery list is shared and is not affected.
+
+## Step 7: Run the app
+
+```sh
+npm run dev
+```
+
+Open the printed URL, normally http://localhost:5173. Add a grocery item.
+Then open **Firestore Database → Data** in the console. A `groceries`
+collection with your item confirms that the setup is complete.
+
+Everyone who runs the app with your config values sees the same grocery
+list, live. To share the list with others, the simplest path is the web
+deployment below, so that nobody has to run a dev server.
+
+## Step 8 (optional): Deploy to GitHub Pages
+
+This gives you one URL that works on every phone and laptop.
+
+1. Push your fork, with your config from Step 3, to GitHub.
+2. In your repository, open **Settings → Pages** and set **Source** to
+   **GitHub Actions**.
+3. If your repository is not named `grocery-list`, edit
+   `.github/workflows/deploy.yml` and change `--base=/grocery-list/` to
+   `--base=/YOUR-REPO-NAME/`.
+4. Push a commit to `main`, or run the **Deploy to GitHub Pages** workflow
+   from the **Actions** tab.
+5. The app appears at `https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/`.
+
+Anyone with this URL can read and write your grocery list. That is the
+intended trade-off of this simple setup: convenient for a small trusted
+group, not suitable for sensitive data.
+
+## Costs
+
+Everything above runs on the free Firebase Spark plan. Its Firestore
+quotas (50,000 reads and 20,000 writes per day) are far more than personal
+use needs. The optional Cloud Functions in `functions/` are the one exception:
+deployment of functions requires the pay-as-you-go Blaze plan. The grocery,
+pantry, and recipe features work without them.
+
+## Troubleshooting
+
+- **"Missing or insufficient permissions" errors**: the rules from Step 5
+  are not published, or anonymous sign-in from Step 6 is off.
+- **The app loads but shows no data and adds fail silently**: open the
+  browser developer console. A message about an invalid API key means that
+  the values in `packages/shared/src/firebase-config.ts` do not match the
+  console (Project settings → General → Your apps).
+- **A blank page on GitHub Pages**: the `--base` path in
+  `.github/workflows/deploy.yml` does not match the repository name. See
+  Step 8.
+- **`npm run dev` fails at startup**: check that `node --version` prints 22
+  or later, then run `npm ci` again.

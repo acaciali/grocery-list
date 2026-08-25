@@ -42,5 +42,57 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    // Inventory is scoped to the signed-in user (anonymous auth is enough).
+    //
+    // Doc IDs are deterministic: `${uid}__${key}`. That is what makes upsert-by-key a
+    // single idempotent setDoc instead of a racy query-read-branch, so the rules pin the
+    // ID format on create -- otherwise a client could park a well-formed doc at an
+    // arbitrary ID and every later upsert would silently miss it.
+    //
+    // NOTE FOR CALLERS: because `read` tests resource.data, Firestore evaluates it against
+    // the *query*, not the rows it would return. An unconstrained
+    // getDocs(collection(db, 'inventory')) is rejected outright, not filtered. Every list
+    // query must include where('userId', '==', uid).
+    match /inventory/{id} {
+      function signedIn() {
+        return request.auth != null;
+      }
+      function mine() {
+        return resource.data.userId == request.auth.uid;
+      }
+      function wellFormed() {
+        return request.resource.data.key is string
+            && request.resource.data.key.size() > 0
+            && request.resource.data.name is string
+            && request.resource.data.userId is string;
+      }
+
+      allow read: if signedIn() && mine();
+
+      allow create: if signedIn()
+                    && wellFormed()
+                    && request.resource.data.userId == request.auth.uid
+                    && id == request.auth.uid + '__' + request.resource.data.key;
+
+      // userId and key are frozen: either one drifting would orphan the doc from its own ID.
+      allow update: if signedIn()
+                    && mine()
+                    && wellFormed()
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.key == resource.data.key;
+
+      allow delete: if signedIn() && mine();
+    }
+
+    // One shared cookbook: everyone signed in sees and edits the same recipes.
+    // Deliberately plain CRUD -- no field validation here, the Recipe shape is
+    // enforced by TypeScript (packages/shared/src/types.ts).
+    match /recipes/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
   }
 }

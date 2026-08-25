@@ -4,123 +4,246 @@
 **Bonus:** push items into a real cart
 **Owns:** `/grocery/`, `/functions/stores.ts`, `groceries` collection
 
-> You inherit the only working code in the repo. Your first job is upgrading it without
-> breaking it — the existing app is real and in use.
-
 ---
 
 ## 📍 Where this stands
 
-Backend and frontend for **store connection, search, and matching are built**. Cart push is
-not. Nothing has run against the live Kroger API — every result so far is `MockStore`.
+Store connection, product search, and the whole match/UI model are **built**. Cart push is
+not. **Nothing has run against the live Kroger API** — every result so far is `MockStore`.
 
 `npm run typecheck` and `npm run build` clean. `npm run test` green (19 shared + 9 web).
 
-**Resume at:** `resolveItems` verification (see Backend → Kroger integration below).
+⚠️ **The match model renders correctly but is barely reachable.** `resolveItems` and
+`rememberChoice` exist on the backend and are never called from the frontend, and an
+`unresolved` item has no tap target at all. Fixing that is the top frontend task.
 
-**Environment blockers, both one-time:**
-- Java is not installed → Firestore/Auth emulators cannot start, only Functions.
-  `brew install --cask temurin`
-- `firebase login` has not been run
-- `firestore.rules` has not been deployed
+---
+
+## 🔀 Two tracks — work these in parallel
+
+| | Backend track | Frontend track |
+|---|---|---|
+| **Owns** | `functions/**`, `firestore.rules`, deploys | `apps/web/src/routes/grocery/**` |
+| **Goal** | Verify the resolver, then build cart push | Make the match model reachable |
+| **Blocked by** | Nothing — start now | Nothing for B1–B5; **F6 needs Backend B3** |
+
+### The seam: HTTP contract
+
+Both tracks code against this. It is **already implemented** except `/addToCart` and the
+OAuth endpoints, which are specified here so the frontend can build against a stub instead
+of waiting. **Neither track changes these shapes without telling the other.**
+
+```
+GET  /findStores?zip=84604
+     -> { stores: StoreLocation[] }
+
+GET  /searchProducts?q=milk&locationId=01400376
+     -> { products: StoreProduct[] }
+
+POST /resolveItems                                    ✅ built, ⚠️ UNVERIFIED
+     { locationId: string, uid?: string,
+       items: [{ id: string, name: string }] }        // max 50
+     -> { matches: { [id: string]: StoreMatch } }
+
+POST /rememberChoice                                  ✅ built, never called
+     { uid: string, term: string, product: StoreProduct }
+     -> { ok: true }
+
+--- NOT BUILT YET. Shapes agreed up front so both tracks can move. ---
+
+GET  /krogerAuthUrl?uid=<uid>&redirect=<app-url>
+     -> { url: string }                               // send the user here
+
+GET  /krogerCallback?code=&state=                     // Kroger redirects here
+     -> 302 back into the app
+
+GET  /krogerStatus?uid=<uid>
+     -> { linked: boolean }
+
+POST /addToCart
+     { uid: string, locationId: string,
+       modality: 'PICKUP' | 'DELIVERY',
+       lines: [{ itemId: string, upc: string, quantity: number }] }
+     -> { batchId: string,
+          results: [{ itemId: string, ok: boolean, error?: string }] }
+```
+
+`StoreProduct`, `StoreMatch`, and `StoreLocation` live in `packages/shared/src/types.ts`.
+
+### Files both tracks might touch — coordinate first
+
+- `packages/shared/src/types.ts` — additive only, announce, second reviewer
+- `packages/shared/src/firebase.ts` — frontend needs `persistentLocalCache` (F5)
+- `.claude/grocery.md` — this file; expect conflicts, resolve by keeping both sides
+
+---
+
+# 🔧 BACKEND TRACK
+
+## Setup (one-time, blocks everything else)
+
+- [ ] `brew install --cask temurin` — no JRE, so Firestore and Auth emulators cannot start.
+      Only the Functions emulator runs today, which means `resolveItems` cannot be tested
+      end-to-end (it writes to Firestore via the Admin SDK).
+- [ ] `firebase login` — the CLI is unauthenticated
+- [ ] Copy `functions/.env.example` → `functions/.env`, add the real Kroger client ID/secret
+- [ ] Confirm anonymous auth is enabled in the Firebase console
+
+## B1 · Verify `resolveItems` ⚠️ START HERE
+
+Written, compiles, emulator loads it — but the probe returned **no output** and was never
+diagnosed. Treat as untested.
+
+- [ ] Reproduce: `POST /resolveItems` with `{locationId:'mock-01400376', items:[{id:'a',name:'milk'}]}`
+- [ ] Likely culprit: `cache.ts` calls `getFirestore()` at module load and the Firestore
+      emulator was not running. Confirm before assuming.
+- [ ] Verify each fixture lands in the right state: `milk` → `matched`, `bread` →
+      `ambiguous` (5 candidates), `eggs` → `unavailable`, `birthday card` → `no_match`
+- [ ] Verify the `productPrefs` path returns `chosenBy: 'memory'`
+
+## B2 · Exercise the live Kroger API
+
+Everything so far is `MockStore`. Set `STORE_ADAPTER=kroger`.
+
+- [ ] `findStores` against a real ZIP
+- [ ] `searchProducts` with a real `locationId` — **confirm `upc` and `items[].price` are
+      present.** Kroger omits price and stock entirely without `filter.locationId`; if the
+      shape differs from `functions/src/stores/kroger.ts`, that file is the only thing to fix.
+- [ ] Confirm the token helper refreshes rather than 401ing after ~30 minutes
+- [ ] Confirm `storeProducts` cache entries are written and hit on the second call
+
+## B3 · Cart push — unblocks frontend F6
+
+- [ ] User OAuth2 (`scope=cart.basic:write`), separate from client credentials.
+      *`exchangeAuthCode()` and `refreshUserToken()` already exist in `stores/token.ts`.*
+      Needs a redirect URI registered in the Kroger dev portal.
+- [ ] `GET /krogerAuthUrl`, `GET /krogerCallback`, `GET /krogerStatus` per the contract above
+- [ ] Store refresh tokens at `users/{uid}/private/kroger` — **Admin SDK only.** The rule
+      denying all client access to `users/{uid}/private/**` is already written.
+- [ ] `POST /addToCart` per the contract. *`KrogerStore.addToCart()` already exists* and
+      sends `upc` + `modality`. Return per-line results; partial failure is normal.
+- [ ] Write a `cartBatches/{id}` doc per send. The Public API is write-only — this mirror is
+      the only cart state that exists.
+
+## B4 · Deploy
+
+- [ ] Publish `firestore.rules` — written but **not deployed**; prod still has the original
+      open-`groceries` rules, so `users/{uid}` reads currently fail
+- [ ] Deploy the functions. Nothing has ever been deployed; it has only run in the emulator.
+- [ ] Point the frontend at deployed URLs via `VITE_FUNCTIONS_BASE`
+
+## B5 · Backfill script
+
+- [ ] One-off script giving legacy `groceries` docs a `key` and `category`. Read paths
+      already tolerate their absence, so this is cleanup, not a blocker.
+
+---
+
+# 🎨 FRONTEND TRACK
+
+All under `apps/web/src/routes/grocery/` unless noted.
+
+## F1 · Give `unresolved` items an affordance 🔴
+
+`MatchChip` returns `null` for `unresolved` (`MatchChip.tsx:68`) and is the only thing wired
+to `onOpenMatch`. A plain-text item therefore has **no way to be matched** — it just sits
+there. This is the exact case the feature was built for.
+
+- [ ] Render something tappable for `unresolved` when a store is connected
+- [ ] Keep it quiet — this is the common state, not an error. No red, no badge count.
+- [ ] With no store connected, keep rendering nothing (the list must stay clean without one)
+
+## F2 · Call `resolveItems` 🔴
+
+The endpoint exists; nothing calls it. Without this, type-ahead is the only path to a match
+and anything from I1/I2 stays `unresolved` forever.
+
+- [ ] Add `resolveItems()` to `api.ts` (contract above)
+- [ ] Resolve `unresolved` items when the page has a store connected — batch them, cap at 50
+- [ ] Set `status: 'resolving'` while in flight. `MatchChip` already renders it; nothing
+      currently sets it.
+- [ ] Write results back through `setMatch()` in `data.ts`
+- [ ] Add an `aria-live="polite"` announcement — background matching is otherwise invisible
+      to screen readers
+
+## F3 · Call `rememberChoice` 🔴
+
+`chosenBy: 'memory'` and the ★ in `MatchChip` are unreachable dead code until this exists.
+
+- [ ] On a user correction in `MatchPicker`, POST the choice
+- [ ] Verify a corrected item resolves straight to that product next time
+
+## F4 · Store-switch invalidation
+
+Matches carry a `locationId`; switching stores currently leaves the old store's prices on
+screen. Correctness bug, not polish.
+
+- [ ] On switch, reset matches whose `locationId` no longer matches — **except `not_sold`**,
+      which is a statement about the item, not the store
+- [ ] Banner: "Store changed · N items need re-checking"
+
+## F5 · Smaller gaps
+
+- [ ] `cartQuantity` stepper — field exists, no UI. Show pack size next to it so "2 lb
+      chicken" vs a 1.5 lb package is legible.
+- [ ] Inline quantity editing
+- [ ] Firestore `persistentLocalCache` in `packages/shared/src/firebase.ts` *(shared file —
+      announce)*. This app gets used inside a store on bad signal.
+- [ ] Upsert-by-key in `data.ts` — adding a duplicate bumps quantity instead of adding a row
+- [ ] `useConnectedStore.disconnect` is defined and unused — wire it or drop it
+
+## F6 · Cart UI — needs Backend B3
+
+- [ ] `ReviewAndSend.tsx` — sends `matched` items, lists what it skips and why
+- [ ] Per-item success/failure
+- [ ] **Re-send requires an explicit confirm** naming the reason: Kroger cannot tell us what
+      is already in the cart, so sending twice duplicates. Design this in, don't bolt it on.
+- [ ] After sending: "Sent 4:12pm" + "Open Kroger cart ↗". **Never** render a claim about
+      current cart contents — we cannot know them.
+- [ ] Modality selector (pickup/delivery)
 
 ---
 
 ## ⚠️ Corrections to CLAUDE.md — need team sign-off
 
 1. **`POST /addToCart` takes UPC, not `productId`.** CLAUDE.md's endpoint table says
-   `{productId, quantity}[]`. The Kroger Public API is `PUT /v1/cart/add` with
-   `{ items: [{ upc, quantity, modality }] }`. Our code persists `upc` on every match
-   already, but the doc should be fixed before someone builds to it.
-2. **Phase 0 never created `functions/` or `firebase.json`,** although root `package.json`
-   already declared `"functions"` as a workspace and `npm run emulators` already referenced
-   the functions emulator. Grocery built them, since Grocery needed them first.
-3. **`ensureSignedIn()` was never called** anywhere, so `currentUid()` threw. Now called from
-   `App.tsx` — deliberately *without* gating route rendering, because a failed anonymous
-   sign-in must not take down a grocery list that predates auth and has open rules.
+   `{productId, quantity}[]`; the Public API is `PUT /v1/cart/add` with
+   `{ items: [{ upc, quantity, modality }] }`. Our code persists `upc` already.
+2. **Phase 0 never created `functions/` or `firebase.json`,** though root `package.json`
+   already declared the workspace. Grocery built them.
+3. **`ensureSignedIn()` was never called.** Now called from `App.tsx` — deliberately
+   *without* gating route rendering, since a failed anonymous sign-in must not take down a
+   grocery list that predates auth and has open rules.
 
 ---
 
-## Backend
+## ✅ Already done — don't rebuild these
 
-### Upgrade the existing list
-- [x] Extend `groceries` docs **additively**: `name`, `checked`, `createdAt` unchanged; added
-      `key`, `quantity`, `unit`, `category`, `source`, `sourceId`, `storeProductId`, `match`
-- [ ] Backfill `key` and `category` for existing docs via a one-off script
-- [x] Every read path tolerates the old shape — no field is required
-- [ ] Upsert-by-key: adding a duplicate bumps quantity instead of creating a second row
-- [x] Update `firestore.rules` for the new fields *(written, **not deployed**)*
+**Backend:** `StoreAdapter` + `MockStore` (fixtures for every `MatchStatus`), Kroger token
+helper with refresh-once-retry on 401, `KrogerStore`, `findStores`, `searchProducts`,
+scoring in `matching.ts`, both Firestore caches in `cache.ts`.
 
-### Kroger integration
-- [x] Registered — credentials in hand
-- [x] Client ID + secret read from Functions env, never the browser (`functions/.env.example`)
-- [x] Client-credentials token helper with caching + refresh-once-retry on 401 (`token.ts`)
-- [x] `GET /findStores?zip=`
-- [x] `GET /searchProducts?q=&locationId=`
-- [x] **`StoreAdapter` interface with `MockStore`** — fixtures cover every `MatchStatus`:
-      clean match, 5-way ambiguous, out-of-stock, zero-result, and a slow response
-- [x] Cache store lookups *(per-session in `StorePicker`; durable shared cache still TODO)*
-- [x] Debounce search — 250ms + `AbortController` per keystroke
-- [ ] ⚠️ **`POST /resolveItems` — written but UNVERIFIED.** The probe returned no output and
-      was never diagnosed. Start here. Also `POST /rememberChoice` alongside it.
+**Frontend:** store picker, type-ahead combobox, `parseEntry` (+9 tests), match chips,
+aisle grouping, correction picker, running price estimate with an explicit unpriced count,
+and the React port at full feature parity.
 
-### Cart *(bonus)* — not started
-- [ ] User OAuth2 flow. *Helpers already exist:* `exchangeAuthCode()` and `refreshUserToken()`
-      in `functions/src/stores/token.ts`. Needs a registered redirect URI.
-- [ ] Token storage at `users/{uid}/private/kroger` — Admin SDK only. The rule denying all
-      client access to `users/{uid}/private/**` is already written.
-- [ ] `POST /addToCart`. *`KrogerStore.addToCart()` already exists* and sends `upc`.
-- [ ] **Mirror cart state in Firestore** (`cartBatches`) — rule already written
-- [ ] "Sent to cart" timestamp per item + link out to kroger.com
+**Contract:** `MatchStatus`, `StoreProduct`, `StoreMatch`, `StoreLocation`, `match?` on
+`GroceryItem`, five grocery `Unit` values. `firestore.rules` covering the new collections.
 
----
+### How matching is meant to work
 
-## Frontend
+Two paths, and **both are required**:
 
-All under `apps/web/src/routes/grocery/`, reusing the existing Tailwind tokens.
+1. **Type-ahead** (`AddItemCombobox`) — the primary path; typed items arrive pre-matched.
+   Two rules keep it usable: **Enter with nothing highlighted always adds plain text**
+   (never hijack Enter to take the top result), and no store connected means no dropdown.
+2. **Batch resolve** (`resolveItems`) — items from I1/I2 are written by other teams and
+   never touch the input, so they land `unresolved`. ⚠️ Not wired up yet — F2.
 
-### The list
-- [x] Ported to React + TS with every behavior intact: add, check off, delete, clear checked,
-      live sync
-- [x] Show quantity + unit on each row
-- [x] **Group by aisle/category** — in real shopping order, not alphabetical, and only once
-      there are ≥4 unchecked items (grouping two items helps nobody)
-- [x] Source badge for recipe items *(no link back yet — needs a recipe route to link to)*
-- [ ] Inline quantity editing
-- [x] Unchecked-first, newest-first; checked items fall to the bottom
-
-### Store connection
-- [x] Store picker: ZIP → pick a location → save to `users/{uid}` (`StorePicker.tsx`)
-- [x] Connected store in the header, tappable to switch
-- [x] Product search UI with images, sizes, prices
-- [x] "Add to list" from a search result, carrying the full match
-- [x] **"No store connected" degrades cleanly** — no dropdown, no spinner, no error; the input
-      behaves exactly as it did before. The list is fully usable with zero store integration.
-- [ ] Store-switch invalidation banner ("Store changed · N items need re-checking")
-
-### Cart UI *(bonus)*
-- [x] Match shown per row and correctable (`MatchChip.tsx` + `MatchPicker.tsx`)
-- [x] Running price estimate — with an explicit count of unpriced items, never a partial
-      total presented as complete
-- [ ] "Send to Kroger cart" with per-item success/failure
-- [ ] Honest empty/error states given we can't read the cart back
-
-### How matching actually works
-
-`grocery.md` said "show the match and let the user correct it" but never said *when* matching
-happens. It happens two ways:
-
-1. **Type-ahead** (`AddItemCombobox.tsx`) — the primary path. Items you type arrive already
-   matched. Two rules keep it from fighting fast typing: **Enter with nothing highlighted
-   always adds plain text** (never hijack Enter to take the top result), and no store
-   connected means no dropdown at all.
-2. **Batch resolve** (`POST /resolveItems`) — required regardless, because items from I1 and
-   I2 are written by other teams and never touch the input. They land `unresolved`.
-
-`MatchStatus` distinguishes eight states because they need different UI and different fixes.
-The two that matter most: **`not_sold` is sticky** (otherwise "mom's birthday card" gets
-re-flagged forever) and **`unavailable` ≠ `no_match`** (found-but-out-of-stock has a
-substitute action; found-nothing doesn't).
+`MatchStatus` has eight states because they need different UI and different fixes. The two
+that matter most: **`not_sold` is sticky** (otherwise "mom's birthday card" is re-flagged
+forever) and **`unavailable` ≠ `no_match`** (found-but-out-of-stock has a substitute action;
+found-nothing does not).
 
 ---
 
@@ -136,30 +259,28 @@ substitute action; found-nothing doesn't).
 
 ## Gotchas
 
-- ⚠️ **`whole milk` and `2% milk` both `normalizeKey()` to `milk`.** Two genuinely different
-  products, one key. This is why our product caches key on **query text, not `ItemKey`** — a
-  per-`key` memory would confidently serve whole milk to someone who asked for 2%. It also
-  means I1 de-dupe and I2 `has(key)` currently treat them as the same item, which is probably
-  wrong. Recorded as a skipped test in `items.test.ts`; needs the all-hands.
+- ⚠️ **`whole milk` and `2% milk` both `normalizeKey()` to `milk`.** Two different products,
+  one key. This is why the product caches key on **query text, not `ItemKey`** — a per-`key`
+  memory would confidently serve whole milk to someone who asked for 2%. It also means I1
+  de-dupe and I2 `has(key)` currently treat them as the same item, which is probably wrong.
+  Skipped test in `items.test.ts`; needs the all-hands.
 - ⚠️ **`a dozen eggs` → `dozen-egg` but `eggs` → `egg`.** `LEADING_UNITS` has no `dozen`.
-  Two keys for one thing defeats upsert-by-key and I1 de-dupe. One-line fix, deferred because
-  `normalizeKey` is pending sign-off. Also a skipped test.
-- Kroger product names are messy. Our scorer weights stemmed token *coverage* of the query and
-  does **not** penalise extra brand words on the product side — "Kroger® 2% Reduced Fat Milk"
-  is a good answer to "2% milk". Auto-accept needs ≥0.8 **and** a ≥0.15 gap to the runner-up;
-  everything else asks. A silently wrong match is found at checkout, not in the app.
+  Defeats upsert-by-key (F5) and I1 de-dupe. One-line fix, deferred pending sign-off.
+- Kroger product names are messy. The scorer weights stemmed token *coverage* of the query
+  and does **not** penalise extra brand words — "Kroger® 2% Reduced Fat Milk" is a good
+  answer to "2% milk". Auto-accept needs ≥0.8 **and** a ≥0.15 gap to the runner-up. A
+  silently wrong match is found at checkout, not in the app.
 - The client-credentials token expires (~30 min). `token.ts` caches with a 60s margin *and*
   retries once on 401 — a cache without expiry handling gives intermittent 401s that look
   like random failures.
-- Prices and stock are per-location, and Kroger **omits them entirely** unless
-  `filter.locationId` is passed. That's why `locationId` lives on `StoreMatch` and switching
-  stores invalidates matches.
-- `firestore.rules` in test mode expires. Set a calendar reminder or the app dies mid-demo.
+- Prices and stock are per-location and Kroger **omits them entirely** without
+  `filter.locationId`. That is why `locationId` lives on `StoreMatch` (see F4).
 - Functions bundle via esbuild, inlining `@grocery/shared` raw TS. Import from
   `@grocery/shared/items` or `/types`, **never the package root** — the root barrel pulls in
   the client Firebase SDK. `health.ts` calls `normalizeKey()` on purpose so a broken bundle
-  shows up as a failed health check instead of a wrong match weeks later.
-- `STORE_ADAPTER=mock` forces `MockStore` even with credentials present. Use it if Kroger is
+  fails the health check instead of producing wrong matches weeks later.
+- `STORE_ADAPTER=mock` forces `MockStore` even with credentials. Use it if Kroger is
   rate-limited or down mid-demo.
+- `firestore.rules` in test mode expires. Set a reminder or the app dies mid-demo.
 - Don't regress the existing app. Whatever else happens, someone's real grocery list has to
   keep working.
