@@ -18,6 +18,7 @@ export interface ConnectedStore {
 export function useConnectedStore(): {
   store: ConnectedStore | null;
   zip: string | null;
+  uid: string | null;
   loading: boolean;
   connect: (store: ConnectedStore, zip: string) => Promise<void>;
   disconnect: () => Promise<void>;
@@ -67,6 +68,7 @@ export function useConnectedStore(): {
   return {
     store,
     zip: prefs?.zip ?? null,
+    uid,
     loading,
     connect: (next, zip) =>
       setDoc(

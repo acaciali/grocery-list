@@ -10,14 +10,16 @@ function amount(row: Row): string | null {
 
 export default function GroceryRow({
   row,
+  hasStore,
   onToggle,
   onDelete,
-  onOpenMatch,
+  onOpen,
 }: {
   row: Row;
+  hasStore: boolean;
   onToggle: (row: Row) => void;
   onDelete: (id: string) => void;
-  onOpenMatch: (row: Row) => void;
+  onOpen: (row: Row) => void;
 }) {
   const qty = amount(row);
 
@@ -53,7 +55,12 @@ export default function GroceryRow({
       </button>
 
       <span className="shrink-0 pr-1">
-        <MatchChip match={row.match} onOpen={() => onOpenMatch(row)} />
+        <MatchChip
+          match={row.match}
+          itemName={row.name}
+          hasStore={hasStore}
+          onOpen={() => onOpen(row)}
+        />
       </span>
 
       <button

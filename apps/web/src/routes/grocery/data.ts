@@ -12,10 +12,12 @@ import {
   normalizeKey,
   type Category,
   type GroceryItem,
+  type ItemKey,
   type StoreMatch,
   type StoreProduct,
+  type Unit,
 } from '@grocery/shared';
-import { parseEntry } from './parseEntry';
+import { parseEntry, type ParsedEntry } from './parseEntry';
 
 export type Row = GroceryItem & { id: string };
 
@@ -27,6 +29,19 @@ const groceries = () => collection(db, 'groceries');
  */
 function clean<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
+/**
+ * normalizeKey throws when a name has no identifying words left ("???", "---"). A key is
+ * a nice-to-have on a grocery row and the read paths already tolerate its absence, so a
+ * weird name loses cross-app matching rather than losing the item.
+ */
+function safeKey(name: string): ItemKey | undefined {
+  try {
+    return normalizeKey(name);
+  } catch {
+    return undefined;
+  }
 }
 
 export function matchFromProduct(product: StoreProduct, locationId: string): StoreMatch {
@@ -43,44 +58,116 @@ export function matchFromProduct(product: StoreProduct, locationId: string): Sto
   };
 }
 
-export async function addPlainItem(raw: string): Promise<void> {
-  const { name, quantity, unit } = parseEntry(raw);
+// --- Adding ----------------------------------------------------------------------------
+
+export interface AddResult {
+  merged: boolean;
+  name: string;
+  quantity: number | null;
+  unit: Unit | null;
+}
+
+/** A null unit means "unspecified", which merges with anything. Different units do not. */
+function unitsCompatible(a: Unit | null | undefined, b: Unit | null): boolean {
+  return a == null || b == null || a === b;
+}
+
+/**
+ * The row a new entry should fold into, if any.
+ *
+ * Only unchecked rows: a checked item is already in the basket, and bumping its quantity
+ * would silently change something the user considers done.
+ */
+function mergeTarget(existing: Row[], entry: ParsedEntry): Row | null {
+  const key = safeKey(entry.name);
+  if (key === undefined) return null;
+  return (
+    existing.find(
+      (row) =>
+        !row.checked &&
+        (row.key ?? safeKey(row.name)) === key &&
+        unitsCompatible(row.unit, entry.unit),
+    ) ?? null
+  );
+}
+
+/** A row with no quantity means one of the thing, so adding another makes two. */
+function mergedAmount(target: Row, entry: ParsedEntry): { quantity: number; unit: Unit | null } {
+  return {
+    quantity: (target.quantity ?? 1) + (entry.quantity ?? 1),
+    unit: target.unit ?? entry.unit ?? null,
+  };
+}
+
+export async function addPlainItem(raw: string, existing: Row[] = []): Promise<AddResult> {
+  const entry = parseEntry(raw);
+  const target = mergeTarget(existing, entry);
+
+  if (target) {
+    const amount = mergedAmount(target, entry);
+    await updateDoc(doc(db, 'groceries', target.id), clean(amount));
+    return { merged: true, name: target.name, ...amount };
+  }
+
   await addDoc(
     groceries(),
     clean({
-      name,
+      name: entry.name,
       checked: false,
       createdAt: serverTimestamp(),
-      key: normalizeKey(name),
-      quantity,
-      unit,
+      key: safeKey(entry.name),
+      quantity: entry.quantity,
+      unit: entry.unit,
       source: 'manual',
     }),
   );
+  return { merged: false, name: entry.name, quantity: entry.quantity, unit: entry.unit };
 }
 
 export async function addMatchedItem(
   raw: string,
   product: StoreProduct,
   locationId: string,
-): Promise<void> {
-  const { name, quantity, unit } = parseEntry(raw);
+  existing: Row[] = [],
+): Promise<AddResult> {
+  const entry = parseEntry(raw);
+  const target = mergeTarget(existing, entry);
+  const match = matchFromProduct(product, locationId);
+
+  if (target) {
+    // The user just picked a product, so their choice replaces whatever was on the row.
+    const amount = mergedAmount(target, entry);
+    await updateDoc(
+      doc(db, 'groceries', target.id),
+      clean({
+        ...amount,
+        match,
+        storeProductId: product.productId,
+        category: product.category ?? undefined,
+      }),
+    );
+    return { merged: true, name: target.name, ...amount };
+  }
+
   await addDoc(
     groceries(),
     clean({
-      name,
+      name: entry.name,
       checked: false,
       createdAt: serverTimestamp(),
-      key: normalizeKey(name),
-      quantity,
-      unit,
+      key: safeKey(entry.name),
+      quantity: entry.quantity,
+      unit: entry.unit,
       category: product.category ?? undefined,
       source: 'manual',
       storeProductId: product.productId,
-      match: matchFromProduct(product, locationId),
+      match,
     }),
   );
+  return { merged: false, name: entry.name, quantity: entry.quantity, unit: entry.unit };
 }
+
+// --- Editing ---------------------------------------------------------------------------
 
 export function setMatch(id: string, match: StoreMatch): Promise<void> {
   return updateDoc(doc(db, 'groceries', id), {
@@ -88,6 +175,19 @@ export function setMatch(id: string, match: StoreMatch): Promise<void> {
     storeProductId: match.product?.productId ?? null,
     ...(match.product?.category ? { category: match.product.category as Category } : {}),
   });
+}
+
+/** How many packages to buy -- distinct from the list quantity. See StoreMatch.cartQuantity. */
+export function setCartQuantity(id: string, match: StoreMatch, cartQuantity: number): Promise<void> {
+  return updateDoc(doc(db, 'groceries', id), { match: { ...match, cartQuantity } });
+}
+
+export function setAmount(
+  id: string,
+  quantity: number | null,
+  unit: Unit | null,
+): Promise<void> {
+  return updateDoc(doc(db, 'groceries', id), { quantity, unit });
 }
 
 export function toggleItem(item: Row): Promise<void> {
@@ -105,4 +205,20 @@ export async function clearChecked(items: Row[]): Promise<number> {
   for (const item of checked) batch.delete(doc(db, 'groceries', item.id));
   await batch.commit();
   return checked.length;
+}
+
+// --- Store switching -------------------------------------------------------------------
+
+/** Drops the given rows back to 'unresolved' so they re-resolve against the new store. */
+export async function resetMatches(rows: Row[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const batch = writeBatch(db);
+  for (const row of rows) {
+    batch.update(doc(db, 'groceries', row.id), {
+      match: { status: 'unresolved', locationId: null, product: null },
+      storeProductId: null,
+    });
+  }
+  await batch.commit();
+  return rows.length;
 }

@@ -137,9 +137,12 @@ that makes the app feel smart, and it is cheap once `key` is trustworthy.
 **I3 · Grocery → Kroger** *(Grocery)* — ✅ **largely done ahead of schedule**
 Map list items to Kroger products via search. Show the match and let the user correct
 it — auto-matching groceries is genuinely hard and a confirm step is honest, not lazy.
-Built: type-ahead add, an eight-state `MatchStatus`, per-row match chips, a correction
-picker, aisle grouping, and a running price estimate. Left: the batch resolver for items
-that arrive from I1/I2 is written but **unverified**, and cart push is untouched.
+Built: type-ahead add, an eight-state `MatchStatus`, per-row match chips, a per-item
+sheet (amount, package count, product correction), aisle grouping, a running price
+estimate, batch resolution for items arriving from I1/I2, remembered corrections,
+store-switch invalidation, and offline persistence. Left: **none of it has run against
+the live Kroger API or been seen in a browser** — the batch resolver in particular is
+written and called but still unverified end to end — and cart push is untouched.
 Note the endpoint table in CLAUDE.md is wrong — cart add takes `upc`, not `productId`.
 
 **I4 · Grocery → Inventory** *(Grocery + Inventory)*
