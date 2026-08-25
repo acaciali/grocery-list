@@ -23,20 +23,19 @@ python3 -m http.server 8000
 
 Then open http://localhost:8000.
 
-## ⚠️ Point it at your own Firebase project first
+## Firebase backend
 
-`firebase-config.js` currently points at the original private project, which
-holds a real family grocery list. Before the group starts hacking:
+The app is already wired up: `firebase-config.js` points at the shared
+hackathon Firebase project (`grocery-list-3dd86`), its Firestore database
+exists, and the rules in `firestore.rules` are published. Clone, serve, and
+it works — no Firebase setup needed.
 
-1. Create a new project at the [Firebase console](https://console.firebase.google.com)
-   (Firestore in test mode is fine for a hackathon).
-2. Add a Web App to the project and copy its config object over the one in
-   `firebase-config.js`.
-3. Publish `firestore.rules` to the new project (Firestore → Rules, or
-   `firebase deploy --only firestore:rules`).
+To browse the data or edit rules, ask to be added to the project, then open
+the [Firebase console](https://console.firebase.google.com) → grocery-list →
+Firestore Database. Items live in the `groceries` collection.
 
-No other changes needed — the app creates documents in the `groceries`
-collection on first use.
+If rules change, edit `firestore.rules` here first (so the repo stays the
+source of truth), then paste them into Firestore → Rules → Publish.
 
 ## Data model
 
