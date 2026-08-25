@@ -1,48 +1,50 @@
-# Grocery List
+# Kitchen Loop
 
-A shared, real-time grocery list. Plain HTML/CSS/JS with no build step —
-items sync live between everyone's browsers through Cloud Firestore.
+A shared kitchen app for families: a real-time grocery list, a per-user
+pantry, and recipes. React + Vite + Tailwind on the front end, Cloud
+Firestore for storage and live sync. There is no server to run — a static
+host such as GitHub Pages is enough.
 
-## Files
+**Run it for your own family:** see [docs/SETUP.md](docs/SETUP.md). You
+create a free Firebase project, paste its config into one file, and deploy.
+Your data stays in your own project.
 
-- `index.html` — the page.
-- `groceries.js` — all app logic (add, check off, delete, clear checked).
-  Loads the Firebase SDK as ES modules from the CDN.
-- `style.css` — styles.
-- `firebase-config.js` — Firebase project identifiers (not secrets; access
-  control lives in `firestore.rules`).
-- `firestore.rules` — Firestore security rules for the `groceries` collection.
+## Repository layout
 
-## Run it locally
+- `apps/web/` — the React app. Routes live in `apps/web/src/routes/`
+  (`grocery`, `inventory`, `recipe`).
+- `packages/shared/` — the Firebase setup, the item contract, shared types,
+  and their tests. `packages/shared/src/firebase-config.ts` holds the
+  Firebase project identifiers.
+- `functions/` — optional Cloud Functions, for features that need a secret
+  or a CORS proxy. The core app works without them.
+- `firestore.rules` — the Firestore security rules. This file is the source
+  of truth. After a change merges to `main`, paste the file into
+  Firestore → Rules in the console and click **Publish**.
+- `.github/workflows/deploy.yml` — builds `apps/web` and deploys it to
+  GitHub Pages on every push to `main`.
+- `index.html`, `groceries.js`, `style.css`, `firebase-config.js` — the
+  original vanilla version of the grocery list, kept during the port.
+  New work goes in `apps/web`.
 
-ES modules do not load from `file://`, so serve the directory over HTTP:
+## Development
 
 ```sh
-python3 -m http.server 8000
+npm ci          # install all workspaces
+npm run dev     # start the web app on http://localhost:5173
+npm test        # run the shared package tests
+npm run emulators  # optional: local Firestore + Auth emulator suite
 ```
 
-Then open http://localhost:8000.
-
-## Firebase backend
-
-The app is already wired up: `firebase-config.js` points at the shared
-hackathon Firebase project (`grocery-list-3dd86`), its Firestore database
-exists, and the rules in `firestore.rules` are published. Clone, serve, and
-it works — no Firebase setup needed.
-
-To browse the data or edit rules, ask to be added to the project, then open
-the [Firebase console](https://console.firebase.google.com) → grocery-list →
-Firestore Database. Items live in the `groceries` collection.
-
-If rules change, edit `firestore.rules` here first (so the repo stays the
-source of truth), then paste them into Firestore → Rules → Publish.
+The dev server talks to the live shared Firestore project. To develop
+against a local throwaway database instead, start the emulators and set
+`VITE_USE_EMULATORS=true` in `apps/web/.env.local`.
 
 ## Data model
 
-One Firestore document per item in the `groceries` collection:
-
-```
-{ name: string, checked: boolean, createdAt: serverTimestamp }
-```
-
-The list renders unchecked items first (newest first), checked items after.
+- `groceries/{id}` — one document per list item:
+  `{ name, checked, createdAt }`. The list is shared by everyone who uses
+  the same Firebase project.
+- `inventory/{uid}__{key}` — one document per pantry item, scoped to the
+  signed-in (anonymous) user. See the comments in `firestore.rules` for the
+  ID and query contract.
