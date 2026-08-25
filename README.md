@@ -1,11 +1,11 @@
 # Kitchen Loop
 
-A shared kitchen app for families: a real-time grocery list, a per-user
-pantry, and recipes. React + Vite + Tailwind on the front end, Cloud
+A shared kitchen app: a real-time grocery list, a per-user pantry, and
+recipes. React + Vite + Tailwind on the front end, Cloud
 Firestore for storage and live sync. There is no server to run — a static
 host such as GitHub Pages is enough.
 
-**Run it for your own family:** see [docs/SETUP.md](docs/SETUP.md). You
+**Run it for your own use:** see [docs/SETUP.md](docs/SETUP.md). You
 create a free Firebase project, paste its config into one file, and deploy.
 Your data stays in your own project.
 

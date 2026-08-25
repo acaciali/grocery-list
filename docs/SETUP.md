@@ -1,7 +1,7 @@
 # Set up Kitchen Loop with your own Firebase project
 
-This guide shows you how to run this app for your own family. You create
-your own free Firebase project. Your family's data stays in your project,
+This guide shows you how to run this app for your own use. You create
+your own free Firebase project. Your data stays in your project,
 under your control. The app needs no server of its own.
 
 Time estimate: 20 to 30 minutes.
@@ -104,12 +104,12 @@ Then open **Firestore Database → Data** in the console. A `groceries`
 collection with your item confirms that the setup is complete.
 
 Everyone who runs the app with your config values sees the same grocery
-list, live. For family use, the simplest path is the web deployment below,
-so that nobody has to run a dev server.
+list, live. To share the list with others, the simplest path is the web
+deployment below, so that nobody has to run a dev server.
 
 ## Step 8 (optional): Deploy to GitHub Pages
 
-This gives your family one URL that works on every phone and laptop.
+This gives you one URL that works on every phone and laptop.
 
 1. Push your fork, with your config from Step 3, to GitHub.
 2. In your repository, open **Settings → Pages** and set **Source** to
@@ -122,14 +122,14 @@ This gives your family one URL that works on every phone and laptop.
 5. The app appears at `https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/`.
 
 Anyone with this URL can read and write your grocery list. That is the
-intended trade-off of this simple setup: convenient for a family, not
-suitable for sensitive data.
+intended trade-off of this simple setup: convenient for a small trusted
+group, not suitable for sensitive data.
 
 ## Costs
 
 Everything above runs on the free Firebase Spark plan. Its Firestore
-quotas (50,000 reads and 20,000 writes per day) are far more than a family
-needs. The optional Cloud Functions in `functions/` are the one exception:
+quotas (50,000 reads and 20,000 writes per day) are far more than personal
+use needs. The optional Cloud Functions in `functions/` are the one exception:
 deployment of functions requires the pay-as-you-go Blaze plan. The grocery,
 pantry, and recipe features work without them.
 
