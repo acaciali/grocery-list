@@ -83,5 +83,24 @@ describe('normalizeKey', () => {
       expect(normalizeKey('ground beef')).toBe('ground-beef');
       expect(normalizeKey('freshly ground black pepper')).toBe('black-pepper');
     });
+
+    // --- Found by Grocery while designing Kroger product matching -------------------
+
+    it('should milk fat content survive, given "whole" is a descriptor?', () => {
+      // Currently BOTH normalize to 'milk'. Two genuinely different products collide on
+      // one key, so any per-key "what did I pick last time" memory will confidently serve
+      // whole milk to someone who asked for 2%. Grocery works around this by keying its
+      // caches on the typed text rather than on `key` -- but de-dupe (I1) and has(key)
+      // (I2) still treat them as the same item, which is probably wrong.
+      expect(normalizeKey('whole milk')).not.toBe(normalizeKey('2% milk'));
+    });
+
+    it('should "dozen" be treated as a leading unit?', () => {
+      // Currently 'dozen-egg' vs 'egg' -- LEADING_UNITS has no 'dozen', so it survives as
+      // an identity token. Two keys for the same thing defeats upsert-by-key and I1
+      // de-dupe. Adding 'dozen' to LEADING_UNITS is a one-line fix; it is listed here
+      // rather than applied because normalizeKey is pending all-hands sign-off.
+      expect(normalizeKey('a dozen eggs')).toBe('egg');
+    });
   });
 });

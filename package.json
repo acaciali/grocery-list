@@ -13,9 +13,10 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "emulators": "firebase emulators:start --only firestore,auth,functions"
+    "emulators": "npm run build -w functions && firebase emulators:start --only firestore,auth,functions"
   },
   "devDependencies": {
+    "firebase-tools": "^13.29.1",
     "typescript": "^5.6.3"
   }
 }

@@ -9,7 +9,10 @@ import type { Timestamp } from 'firebase/firestore';
 
 export type Unit =
   | 'g' | 'kg' | 'oz' | 'lb' | 'ml' | 'l'
-  | 'tsp' | 'tbsp' | 'cup' | 'clove' | 'can' | 'pkg';
+  | 'tsp' | 'tbsp' | 'cup' | 'clove' | 'can' | 'pkg'
+  // Grocery additions (additive, announced): how people actually write list quantities.
+  // The original set is recipe-shaped; "2 gal milk" and "a dozen eggs" had no home.
+  | 'gal' | 'each' | 'dozen' | 'bunch' | 'bag';
 
 export type Category =
   | 'produce' | 'dairy' | 'meat' | 'seafood' | 'bakery'
@@ -74,6 +77,69 @@ export type InventoryItemInput =
 
 // --- Grocery ---------------------------------------------------------------------------
 
+/**
+ * Where a list item stands on its way to a real store product. The list never blocks on
+ * any of these -- an item is on the list the moment it's typed; this only tracks whether
+ * the store leg of the trip is ready.
+ */
+export type MatchStatus =
+  | 'unresolved'   // never attempted -- arrived via I1/I2, or added with no store connected
+  | 'resolving'    // lookup in flight
+  | 'matched'      // confident single product
+  | 'ambiguous'    // several plausible candidates; needs a human pick
+  | 'unavailable'  // right product, out of stock at this location
+  | 'no_match'     // search returned nothing usable
+  | 'not_sold'     // human said "stores don't sell this" -- sticky, never auto-retried
+  | 'sent';        // pushed to the store cart
+
+/** One product at one store, as returned by the store's search. */
+export interface StoreProduct {
+  productId: string;
+  /** Kroger's cart-add endpoint takes UPC, not productId. Persist it or cart push dies. */
+  upc: string;
+  name: string;
+  brand?: string | null;
+  /** Display size string as the store gives it, e.g. "1 gal". */
+  size?: string | null;
+  imageUrl?: string | null;
+  price?: number | null;
+  promoPrice?: number | null;
+  stockLevel?: 'HIGH' | 'LOW' | 'TEMPORARILY_OUT_OF_STOCK' | null;
+  category?: Category | null;
+}
+
+/**
+ * A grocery item's link to a store product. Prices, stock, and availability are all
+ * per-store, so `locationId` lives here: switching stores resets matches to 'unresolved'
+ * rather than showing another store's prices. 'not_sold' is the one status that survives
+ * a store switch -- it is a statement about the item, not the store.
+ */
+export interface StoreMatch {
+  status: MatchStatus;
+  locationId: string | null;
+  product?: StoreProduct | null;
+  /** Top candidates cached at resolve time so the picker opens without a round-trip. */
+  candidates?: StoreProduct[];
+  /** 0-1 resolver confidence; only meaningful when chosenBy === 'auto'. */
+  confidence?: number | null;
+  chosenBy?: 'user' | 'auto' | 'memory' | null;
+  /**
+   * Packages to put in the cart -- distinct from the list quantity. "2 lb chicken"
+   * against a 1.5 lb package is 2 packages, not 2 lb.
+   */
+  cartQuantity?: number | null;
+  resolvedAt?: Timestamp | null;
+  sentAt?: Timestamp | null;
+}
+
+/** A store location, as returned by /findStores. */
+export interface StoreLocation {
+  locationId: string;
+  name: string;
+  address: string;
+  chain?: string | null;
+}
+
 /** `groceries` is live. Extend it additively so today's app keeps working. */
 export interface GroceryItem {
   name: string;
@@ -86,7 +152,9 @@ export interface GroceryItem {
   source?: 'manual' | 'recipe' | 'inventory';
   /** Trace + de-dupe. */
   sourceId?: string | null;
+  /** Mirror of match.product.productId, kept so pre-match readers stay correct. */
   storeProductId?: string | null;
+  match?: StoreMatch | null;
 }
 
 // --- Recipe ----------------------------------------------------------------------------
