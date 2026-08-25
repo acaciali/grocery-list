@@ -48,12 +48,12 @@ export function useInventory(): UseInventory {
       } catch (err) {
         console.error(err);
         if (cancelled) return;
-        // The store already translated this into something worth reading (which setup
-        // step is missing, usually), so show that rather than flattening it again.
+        // signIn() no longer does auth, so this path is now only reachable if the store
+        // itself throws. Show whatever it said rather than inventing a message.
         setError(
           err instanceof Error && err.message
             ? err.message
-            : "Couldn't sign in, so your pantry didn't load.",
+            : "Couldn't load your pantry.",
         );
         setLoading(false);
       }

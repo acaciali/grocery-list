@@ -10,5 +10,5 @@ export const ping = onRequest((req, res) => {
   res.json({ ok: true, from: 'functions', at: new Date().toISOString() });
 });
 
-// Inventory. analyzeShelf is currently a STUB returning canned detections -- see vision.ts.
-export { analyzeShelf } from './vision.js';
+// Inventory: shelf photo -> candidate items, via Claude vision. Needs ANTHROPIC_API_KEY.
+export { analyzeShelf } from './vision';

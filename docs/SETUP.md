@@ -79,21 +79,7 @@ Access control comes from the security rules in Step 5.
 Warning: do not skip this step. Without these rules, every read and write
 from the app is rejected, and the app shows permission errors.
 
-## Step 6: Enable anonymous sign-in
-
-The pantry feature stores data per user and needs a signed-in user.
-The app signs each device in anonymously, with no account or password.
-
-1. In the console sidebar, open **Build → Authentication**.
-2. Click **Get started**.
-3. Open the **Sign-in method** tab.
-4. Select **Anonymous**, turn on **Enable**, and click **Save**.
-
-Note: an anonymous user is tied to the browser storage of one device.
-If you clear site data or use a private window, that device gets a new,
-empty pantry. The grocery list is shared and is not affected.
-
-## Step 7: Run the app
+## Step 6: Run the app
 
 ```sh
 npm run dev
@@ -104,10 +90,11 @@ Then open **Firestore Database → Data** in the console. A `groceries`
 collection with your item confirms that the setup is complete.
 
 Everyone who runs the app with your config values sees the same grocery
-list, live. To share the list with others, the simplest path is the web
+list and the same pantry, live. There are no accounts and no sign-in:
+one project is one household. To share the list with others, the simplest path is the web
 deployment below, so that nobody has to run a dev server.
 
-## Step 8 (optional): Deploy to GitHub Pages
+## Step 7 (optional): Deploy to GitHub Pages
 
 This gives you one URL that works on every phone and laptop.
 
@@ -136,13 +123,13 @@ pantry, and recipe features work without them.
 ## Troubleshooting
 
 - **"Missing or insufficient permissions" errors**: the rules from Step 5
-  are not published, or anonymous sign-in from Step 6 is off.
+  are not published to this project.
 - **The app loads but shows no data and adds fail silently**: open the
   browser developer console. A message about an invalid API key means that
   the values in `packages/shared/src/firebase-config.ts` do not match the
   console (Project settings → General → Your apps).
 - **A blank page on GitHub Pages**: the `--base` path in
   `.github/workflows/deploy.yml` does not match the repository name. See
-  Step 8.
+  Step 7.
 - **`npm run dev` fails at startup**: check that `node --version` prints 22
   or later, then run `npm ci` again.

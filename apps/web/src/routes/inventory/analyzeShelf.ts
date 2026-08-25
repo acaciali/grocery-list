@@ -1,27 +1,21 @@
 /**
  * Client half of 📸 /analyzeShelf: downscale, POST, validate.
  *
- * The backend function is currently a stub (functions/src/vision.ts). This module talks to
- * it if VITE_ANALYZE_SHELF_URL is set, and otherwise falls back to the same canned data
- * in-process so the review grid is testable with nothing running. Both paths return the
- * identical shape, so the day the real function lands the only change is the env var.
+ * The backend function is real now (functions/src/vision.ts -> Claude vision). This module
+ * talks to it when VITE_ANALYZE_SHELF_URL is set, and otherwise falls back to canned data
+ * in-process so the review grid stays testable with nothing running and no API key burned.
+ * Both paths return the identical shape, so the fallback is a dev convenience, not a lie:
+ * the UI labels it via `stubbed`.
  */
-import { asItemKey, normalizeKey, type Category, type ItemKey } from '@grocery/shared';
+import { asItemKey, normalizeKey, type Category, type ShelfCandidate } from '@grocery/shared';
 import { CATEGORIES } from './constants';
 
 /**
- * Mirrors functions/src/vision.ts. Duplicated rather than imported because `functions` is
- * a separate workspace the web app does not depend on -- if this pair ever drifts, promote
- * it into packages/shared instead of patching one side.
+ * Now the shared contract, not a local copy: the vision endpoint returns ShelfCandidate,
+ * so both halves of /analyzeShelf are typed by the same declaration and cannot drift.
+ * The alias stays so ReviewGrid's `Candidate extends DetectedItem` reads the same.
  */
-export interface DetectedItem {
-  key: ItemKey;
-  name: string;
-  brand?: string | null;
-  category: Category;
-  confidence: number;
-  note?: string | null;
-}
+export type DetectedItem = ShelfCandidate;
 
 export interface AnalyzeShelfResult {
   items: DetectedItem[];

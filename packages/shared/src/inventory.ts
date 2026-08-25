@@ -3,11 +3,11 @@
  *
  * Presence-based: we track WHETHER you have something, not how much.
  *
- * Doc IDs are deterministic (`${uid}__${key}`), which is what makes upsert-by-key a
- * single idempotent setDoc instead of a racy query-read-branch, and has(key) a single
- * getDoc. The firestore rules pin this format on create.
+ * Doc IDs are deterministic: the normalized key itself. That is what makes
+ * upsert-by-key a single idempotent setDoc instead of a racy query-read-branch, and
+ * has(key) a single getDoc.
  *
- * Callers must ensureSignedIn() first; every function here throws otherwise.
+ * POC note: single-user, no auth -- one shared pantry, like the existing groceries list.
  */
 import {
   collection,
@@ -16,15 +16,13 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
-  query,
   serverTimestamp,
   setDoc,
-  where,
   writeBatch,
   type FirestoreError,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { currentUid, db } from './firebase.js';
+import { db } from './firebase.js';
 import { normalizeKey } from './items.js';
 import type { InventoryItem, InventoryItemInput, ItemKey } from './types.js';
 
@@ -34,17 +32,14 @@ const COLLECTION = 'inventory';
 const BATCH_LIMIT = 500;
 
 /**
- * An inventory row as the UI holds it: the stored shape plus its document id. The id is
- * derivable (`${uid}__${key}`), but carrying it lets React key off it directly.
+ * An inventory row as the UI holds it. Since auth came out, the doc ID *is* the key, so
+ * `id` is now redundant with `key` -- it stays because six components already key off it,
+ * and because it is the field that would have to change again if per-user IDs return.
  */
 export type InventoryRow = InventoryItem & { id: string };
 
-function docIdFor(uid: string, key: ItemKey): string {
-  return `${uid}__${key}`;
-}
-
-function inventoryRef(uid: string, key: ItemKey) {
-  return doc(db, COLLECTION, docIdFor(uid, key));
+function inventoryRef(key: ItemKey) {
+  return doc(db, COLLECTION, key);
 }
 
 /**
@@ -57,12 +52,11 @@ function definedFields<T extends object>(obj: T): Partial<T> {
   ) as Partial<T>;
 }
 
-function toWriteData(uid: string, input: InventoryItemInput): { key: ItemKey; data: object } {
+function toWriteData(input: InventoryItemInput): { key: ItemKey; data: object } {
   const key = input.key ?? normalizeKey(input.name);
   const data = {
     ...definedFields(input),
     key,
-    userId: uid,
     updatedAt: serverTimestamp(),
   };
   return { key, data };
@@ -75,9 +69,8 @@ function toWriteData(uid: string, input: InventoryItemInput): { key: ItemKey; da
  * never creates a duplicate. `key` is derived from `name` when omitted.
  */
 export async function upsertItem(input: InventoryItemInput): Promise<ItemKey> {
-  const uid = currentUid();
-  const { key, data } = toWriteData(uid, input);
-  await setDoc(inventoryRef(uid, key), data, { merge: true });
+  const { key, data } = toWriteData(input);
+  await setDoc(inventoryRef(key), data, { merge: true });
   return key;
 }
 
@@ -87,10 +80,9 @@ export async function upsertItem(input: InventoryItemInput): Promise<ItemKey> {
  * and a photo genuinely can return "black beans" twice. Later entries win.
  */
 export async function batchUpsertItems(inputs: InventoryItemInput[]): Promise<ItemKey[]> {
-  const uid = currentUid();
   const byKey = new Map<ItemKey, object>();
   for (const input of inputs) {
-    const { key, data } = toWriteData(uid, input);
+    const { key, data } = toWriteData(input);
     byKey.set(key, data);
   }
 
@@ -98,7 +90,7 @@ export async function batchUpsertItems(inputs: InventoryItemInput[]): Promise<It
   for (let i = 0; i < entries.length; i += BATCH_LIMIT) {
     const batch = writeBatch(db);
     for (const [key, data] of entries.slice(i, i + BATCH_LIMIT)) {
-      batch.set(inventoryRef(uid, key), data, { merge: true });
+      batch.set(inventoryRef(key), data, { merge: true });
     }
     await batch.commit();
   }
@@ -106,32 +98,31 @@ export async function batchUpsertItems(inputs: InventoryItemInput[]): Promise<It
 }
 
 /**
- * Patch fields on an existing item. `key` and `userId` are frozen by the security
- * rules (they would orphan the doc from its own ID), so the patch type excludes them.
+ * Patch fields on an existing item. `key` is the identity (it IS the doc ID), so the
+ * patch type excludes it.
  */
 export async function updateItem(
   key: ItemKey,
   patch: Partial<Omit<InventoryItemInput, 'key'>>,
 ): Promise<void> {
-  const uid = currentUid();
   await setDoc(
-    inventoryRef(uid, key),
+    inventoryRef(key),
     { ...definedFields(patch), updatedAt: serverTimestamp() },
     { merge: true },
   );
 }
 
 export async function removeItem(key: ItemKey): Promise<void> {
-  await deleteDoc(inventoryRef(currentUid(), key));
+  await deleteDoc(inventoryRef(key));
 }
 
 /**
- * Rename an item -- which, because the doc ID is derived from the key, is not an update.
+ * Rename an item -- which is not an update, because the key IS the document ID.
  *
- * ⚠️ Editing "chiken" to "chicken" changes normalizeKey()'s output, which changes the
- * document ID. The rules freeze `key` on update precisely so a row can never drift away
- * from the ID it lives at, so this is a write-new-then-delete-old, not a patch. Reach for
- * updateItem() only when the name (and therefore the key) is staying put.
+ * ⚠️ Editing "chiken" to "chicken" changes normalizeKey()'s output and therefore the
+ * document it lives at, so this is write-new-then-delete-old. updateItem() is only for
+ * when the name (and so the key) is staying put; using it for a rename would leave the
+ * old row behind and silently duplicate the item.
  *
  * If the new key is one you already have, the upsert merges into that row and the old row
  * is dropped -- fixing a typo de-dupes as a side effect, which is the behaviour you want.
@@ -152,7 +143,7 @@ export async function renameItem(
 
 /** I2 (Grocery): do I already own this? One getDoc -- the cheapest read Firestore has. */
 export async function has(key: ItemKey): Promise<boolean> {
-  const snap = await getDoc(inventoryRef(currentUid(), key));
+  const snap = await getDoc(inventoryRef(key));
   return snap.exists();
 }
 
@@ -161,25 +152,19 @@ export async function has(key: ItemKey): Promise<boolean> {
  * query, which caps at 30 values.
  */
 export async function hasMany(keys: ItemKey[]): Promise<Record<string, boolean>> {
-  const uid = currentUid();
   const unique = [...new Set(keys)];
-  const snaps = await Promise.all(unique.map((k) => getDoc(inventoryRef(uid, k))));
+  const snaps = await Promise.all(unique.map((k) => getDoc(inventoryRef(k))));
   return Object.fromEntries(unique.map((k, i) => [k, snaps[i]?.exists() ?? false]));
-}
-
-/** The rules reject unconstrained collection reads -- every query must filter by userId. */
-function myItemsQuery() {
-  return query(collection(db, COLLECTION), where('userId', '==', currentUid()));
 }
 
 /** I5 (Recipe): every key in the pantry, for AI recipe generation. */
 export async function getAllKeys(): Promise<ItemKey[]> {
-  const snap = await getDocs(myItemsQuery());
+  const snap = await getDocs(collection(db, COLLECTION));
   return snap.docs.map((d) => (d.data() as InventoryItem).key);
 }
 
 export async function listItems(): Promise<InventoryItem[]> {
-  const snap = await getDocs(myItemsQuery());
+  const snap = await getDocs(collection(db, COLLECTION));
   return snap.docs.map((d) => d.data() as InventoryItem);
 }
 
@@ -189,16 +174,16 @@ export async function listItems(): Promise<InventoryItem[]> {
  * Grouping (location, then category) is the caller's job -- Firestore can't group.
  *
  * Pass onError. An onSnapshot listener without one swallows a failed listen into an
- * unhandled console error, and the most likely failure here -- rules not published yet,
- * so the very first listen is denied -- would otherwise leave a UI waiting on a first
- * snapshot that is never coming, with nothing to show for it.
+ * unhandled console error and never delivers a first snapshot, leaving a UI waiting on
+ * something that is not coming. Open rules make a denial unlikely, not impossible: an
+ * offline start, a blocked request, or rules that were never published all land here.
  */
 export function subscribeToInventory(
   callback: (items: InventoryItem[]) => void,
   onError?: (error: FirestoreError) => void,
 ): Unsubscribe {
   return onSnapshot(
-    myItemsQuery(),
+    collection(db, COLLECTION),
     (snap) => {
       callback(
         snap.docs.map((d) => d.data({ serverTimestamps: 'estimate' }) as InventoryItem),

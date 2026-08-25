@@ -2,38 +2,33 @@
  * Where the pantry lives. Two implementations of one interface; `pantry` at the bottom
  * picks which one the UI talks to.
  *
- * ⭐ THE BACKEND IS THE DEFAULT. `pantry` is the Firestore store, so the pantry is real,
- * per-user and synced across devices. The browser-only stub is still here because it
- * needs no Firebase project, no rules and no network -- which is what you want for UI
- * work, for a plane, and for a fresh clone that has not been through docs/SETUP.md yet.
- * To get it, put this in apps/web/.env.local:
+ * ⭐ THE BACKEND IS THE DEFAULT. `pantry` is the Firestore store. The browser-only stub
+ * is still here because it needs no Firebase project, no rules and no network -- which is
+ * what you want for UI work, for a plane, and for a fresh clone that has not been through
+ * docs/SETUP.md yet. To get it, put this in apps/web/.env.local:
  *
  *     VITE_PANTRY=local
  *
- * And while developing against Firestore, VITE_USE_EMULATORS=true in the same file
- * points reads and writes at `npm run emulators` instead of the live project.
+ * And while developing against Firestore, VITE_USE_EMULATORS=true in the same file points
+ * reads and writes at `npm run emulators` instead of the live project.
  *
  * ───────────────────────────────────────────────────────────────────────────────────────
- * 🔌 THE SEAM. Nothing in the UI knows which implementation it is talking to. Components
- * take `uid` and call PantryStore methods; that is the whole contract.
+ * 🔌 THE SEAM. Nothing in the UI knows which implementation it is talking to.
  *
  * The Firestore store forwards to `packages/shared/src/inventory.ts`, which is also where
  * Grocery gets `has()` for I2 and Recipe gets `getAllKeys()` for I5 -- which is why the
  * data layer lives in shared and only this adapter lives here.
  *
- * Two mismatches the adapter absorbs, rather than pushing onto components:
- *
- *   - shared takes the uid from `currentUid()` instead of a parameter, so every method
- *     here ignores its `uid` argument. signIn() must resolve before anything else runs;
- *     useInventory guarantees that ordering.
- *   - shared's subscribe returns InventoryItem[] with no doc id. The id is derivable
- *     (`${uid}__${key}`), so the adapter synthesizes it, exactly as the stub does.
+ * ⚠️ NO AUTH. The pantry is single-user and shared, like the groceries list: one document
+ * per normalized key, readable and writable by anyone who can reach the project. The
+ * `uid` threaded through this interface is vestigial -- signIn() hands back a constant so
+ * the UI's "wait for an id, then subscribe" sequence still holds. Tighten firestore.rules
+ * and reinstate a real identity before this is public.
  * ───────────────────────────────────────────────────────────────────────────────────────
  */
 import { Timestamp } from 'firebase/firestore';
 import {
   batchUpsertItems,
-  ensureSignedIn,
   getAllKeys,
   has,
   normalizeKey,
@@ -52,7 +47,7 @@ import {
 export interface PantryStore {
   /** True while the pantry is browser-only. The UI says so rather than implying sync. */
   readonly isLocal: boolean;
-  /** Resolves to the uid every other method is scoped by. */
+  /** Resolves before anything else runs. Returns SINGLE_USER_ID -- see the ⚠️ above. */
   signIn(): Promise<string>;
   /**
    * onError matters once this is a real backend: a denied listen (rules not published)
@@ -77,10 +72,16 @@ export interface PantryStore {
   clearAll(uid: string): Promise<void>;
 }
 
+/**
+ * Stands in for the uid the UI still passes around. Not a user: there is no auth, and
+ * every store here ignores it. It exists so `uid` is non-null, which is what the
+ * components gate their render on.
+ */
+const SINGLE_USER_ID = 'single-user';
+
 const STORAGE_KEY = 'kitchenloop.pantry.v1';
 /** Separate flag so clearing the pantry doesn't just re-seed on the next reload. */
 const SEEDED_KEY = 'kitchenloop.pantry.seeded';
-const LOCAL_UID = 'local';
 
 /** Stored shape: same as InventoryItem, but timestamps become epoch millis because a
  *  Firestore Timestamp does not survive JSON.stringify. */
@@ -117,9 +118,9 @@ function writeAll(items: StoredItem[]): void {
 function toRow(item: StoredItem): InventoryRow {
   return {
     ...item,
-    // Mirrors the `${uid}__${key}` id the Firestore side uses, so anything keying off id
-    // behaves identically after the swap.
-    id: `${LOCAL_UID}__${item.key}`,
+    // The Firestore doc ID is the normalized key, so the stub uses the same thing --
+    // anything keying off id behaves identically across the two stores.
+    id: item.key,
     // Timestamp is a plain value class -- constructing one touches no network and needs no
     // initialized app. Using the real type keeps InventoryRow honest so components stay
     // backend-blind and the swap changes nothing.
@@ -132,7 +133,6 @@ function toStored(input: InventoryItemInput): StoredItem {
   const key = input.key ?? normalizeKey(input.name);
   const stored: StoredItem = {
     key,
-    userId: LOCAL_UID,
     name: input.name.trim(),
     category: input.category,
     location: input.location,
@@ -212,7 +212,7 @@ const localPantry: PantryStore = {
     } catch {
       // localStorage blocked -- the app still runs, just with an empty pantry.
     }
-    return LOCAL_UID;
+    return SINGLE_USER_ID;
   },
 
   subscribe(_uid, onRows) {
@@ -302,64 +302,25 @@ function normalizeConfidence(input: InventoryItemInput): InventoryItemInput {
   };
 }
 
-/**
- * Firebase auth failures all surface as one opaque "couldn't sign in", but the causes are
- * distinct one-time setup steps and the error code says which. Naming the step beats
- * making someone open the console and decode `auth/operation-not-allowed` themselves.
- */
-function authErrorMessage(err: unknown): string {
-  const code = typeof err === 'object' && err !== null && 'code' in err
-    ? String((err as { code: unknown }).code)
-    : '';
-
-  switch (code) {
-    case 'auth/operation-not-allowed':
-      return 'Anonymous sign-in is turned off for this Firebase project. Turn it on under Authentication → Sign-in method → Anonymous (docs/SETUP.md, step 6).';
-    case 'auth/configuration-not-found':
-      return 'This Firebase project has no Authentication set up yet. Open Authentication in the console, click Get started, then enable Anonymous sign-in (docs/SETUP.md, step 6).';
-    case 'auth/invalid-api-key':
-    case 'auth/api-key-not-valid':
-      return 'The apiKey in packages/shared/src/firebase-config.ts is not valid for this project (docs/SETUP.md, step 3).';
-    case 'auth/network-request-failed':
-      return 'Could not reach Firebase. If VITE_USE_EMULATORS=true, check that `npm run emulators` is actually running.';
-    default:
-      return `Couldn't sign in${code ? ` (${code})` : ''}. The browser console has the full error.`;
-  }
-}
-
-/** The doc id shared writes to. Derivable, so no extra read to learn it. */
-function rowId(uid: string, key: ItemKey): string {
-  return `${uid}__${key}`;
-}
-
 const firestorePantry: PantryStore = {
   isLocal: false,
 
   async signIn() {
-    // Anonymous auth: a stable uid per browser, no account, no password. Every other
-    // method here reads that uid back out of the SDK via currentUid(), so this must
-    // resolve before any of them are called.
-    try {
-      const user = await ensureSignedIn();
-      return user.uid;
-    } catch (err) {
-      console.error('[pantry] sign-in failed', err);
-      // Rethrown with a message the UI can show as-is; useInventory renders it verbatim.
-      throw new Error(authErrorMessage(err));
-    }
+    // No auth to do. Returning the same constant the stub does keeps both stores honest
+    // about there being exactly one pantry.
+    return SINGLE_USER_ID;
   },
 
-  subscribe(uid, onRows, onError) {
+  subscribe(_uid, onRows, onError) {
     return subscribeToInventory(
-      (items) => onRows(items.map((item) => ({ ...item, id: rowId(uid, item.key) }))),
+      // The doc ID *is* the key, so `id` is the key. Components keep using it as their
+      // React key without caring which of the two stores produced the row.
+      (items) => onRows(items.map((item) => ({ ...item, id: item.key }))),
       (err) => {
         console.error('[pantry] listen failed', err);
-        // permission-denied here almost always means firestore.rules was never published
-        // to this project, or anonymous sign-in is still switched off. Both are one-time
-        // setup steps, and both look identical from inside the app, so say so.
         onError?.(
           err.code === 'permission-denied'
-            ? "Firestore rejected the request. Check that firestore.rules is published and anonymous sign-in is on (docs/SETUP.md)."
+            ? 'Firestore rejected the request. Publish firestore.rules to this project (docs/SETUP.md, step 5).'
             : "Couldn't reach your pantry.",
         );
       },
@@ -400,8 +361,8 @@ const firestorePantry: PantryStore = {
   },
 
   async clearAll() {
-    // Scoped to the signed-in user by construction -- getAllKeys only ever returns keys
-    // this uid owns, and the rules would reject anything else.
+    // Empties the collection. There is one shared pantry now, so "all" is literal --
+    // this is not scoped to a user, because there are none.
     const keys = await getAllKeys();
     await Promise.all(keys.map((key) => removeItem(key)));
   },
