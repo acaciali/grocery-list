@@ -5,5 +5,8 @@ service cloud.firestore {
     match /groceries/{id} {
       allow read, create, update, delete: if true;
     }
+    match /recipes/{id} {
+      allow read, create, update, delete: if true;
+    }
   }
 }
