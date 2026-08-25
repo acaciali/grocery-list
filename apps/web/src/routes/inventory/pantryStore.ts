@@ -1,35 +1,46 @@
 /**
- * Where the pantry lives *for now*: entirely in the browser.
+ * Where the pantry lives. Two implementations of one interface; `pantry` at the bottom
+ * picks which one the UI talks to.
  *
- * ⭐ THIS IS STUB DATA. No Firebase, no auth, no network, no setup. Open the Pantry tab on
- * a fresh clone and it just works, pre-filled with a realistic pantry so grouping, search,
- * filtering and the photo review flow all have something real to act on.
+ * ⭐ THE BACKEND IS THE DEFAULT. `pantry` is the Firestore store, so the pantry is real,
+ * per-user and synced across devices. The browser-only stub is still here because it
+ * needs no Firebase project, no rules and no network -- which is what you want for UI
+ * work, for a plane, and for a fresh clone that has not been through docs/SETUP.md yet.
+ * To get it, put this in apps/web/.env.local:
+ *
+ *     VITE_PANTRY=local
+ *
+ * And while developing against Firestore, VITE_USE_EMULATORS=true in the same file
+ * points reads and writes at `npm run emulators` instead of the live project.
  *
  * ───────────────────────────────────────────────────────────────────────────────────────
- * 🔌 BACKEND: THIS IS THE SEAM. Swapping to Firestore means writing one more object that
- * implements PantryStore and exporting that as `pantry` instead. No component changes --
- * nothing in the UI knows or cares which implementation it is talking to.
+ * 🔌 THE SEAM. Nothing in the UI knows which implementation it is talking to. Components
+ * take `uid` and call PantryStore methods; that is the whole contract.
  *
- * The Firestore implementation lives in `packages/shared/src/inventory.ts`. That module is
- * also where Grocery gets `has()` for I2 and Recipe gets `getAllKeys()` for I5, which is
- * why it lives in shared rather than here.
+ * The Firestore store forwards to `packages/shared/src/inventory.ts`, which is also where
+ * Grocery gets `has()` for I2 and Recipe gets `getAllKeys()` for I5 -- which is why the
+ * data layer lives in shared and only this adapter lives here.
  *
- * The adapter is still small, but it is forwarding rather than a straight re-export --
- * shared's API takes the uid from `currentUid()` instead of a parameter (call
- * `ensureSignedIn()` first), and a few names differ:
+ * Two mismatches the adapter absorbs, rather than pushing onto components:
  *
- *     subscribe   -> subscribeToInventory   (returns InventoryItem[]; synthesize `id`
- *                                            as `${uid}__${key}`, as this stub does)
- *     upsertMany  -> batchUpsertItems
- *     deleteItem  -> removeItem
- *
- * `upsertItem`, `renameItem`, `has` and `getAllKeys` map by name. `loadSample`/`clearAll`
- * are stub-only and have no Firestore counterpart.
+ *   - shared takes the uid from `currentUid()` instead of a parameter, so every method
+ *     here ignores its `uid` argument. signIn() must resolve before anything else runs;
+ *     useInventory guarantees that ordering.
+ *   - shared's subscribe returns InventoryItem[] with no doc id. The id is derivable
+ *     (`${uid}__${key}`), so the adapter synthesizes it, exactly as the stub does.
  * ───────────────────────────────────────────────────────────────────────────────────────
  */
 import { Timestamp } from 'firebase/firestore';
 import {
+  batchUpsertItems,
+  ensureSignedIn,
+  getAllKeys,
+  has,
   normalizeKey,
+  removeItem,
+  renameItem,
+  subscribeToInventory,
+  upsertItem,
   type Category,
   type InventoryItem,
   type InventoryItemInput,
@@ -43,7 +54,15 @@ export interface PantryStore {
   readonly isLocal: boolean;
   /** Resolves to the uid every other method is scoped by. */
   signIn(): Promise<string>;
-  subscribe(uid: string, onRows: (rows: InventoryRow[]) => void): () => void;
+  /**
+   * onError matters once this is a real backend: a denied listen (rules not published)
+   * never delivers a first snapshot, so without it the UI waits forever on `loading`.
+   */
+  subscribe(
+    uid: string,
+    onRows: (rows: InventoryRow[]) => void,
+    onError?: (message: string) => void,
+  ): () => void;
   upsertItem(uid: string, input: InventoryItemInput): Promise<ItemKey>;
   upsertMany(uid: string, inputs: InventoryItemInput[]): Promise<ItemKey[]>;
   deleteItem(uid: string, key: ItemKey): Promise<void>;
@@ -179,7 +198,7 @@ function sampleItems(): StoredItem[] {
   return SAMPLE.map((s) => toStored({ ...s, addedVia: 'manual' }));
 }
 
-export const pantry: PantryStore = {
+const localPantry: PantryStore = {
   isLocal: true,
 
   async signIn() {
@@ -264,3 +283,104 @@ export const pantry: PantryStore = {
     writeAll([]);
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// 🔥 The real one: Firestore, via the shared data layer.
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Confidence is a property of a *guess*, so a row that is no longer a guess must not keep
+ * one. The stub clears it on every write; shared's `definedFields` only drops `undefined`,
+ * so an untouched confidence would survive a merge and a photo-added item edited by hand
+ * would keep its old score. Normalizing here keeps the two stores byte-comparable rather
+ * than relying on every component to remember.
+ */
+function normalizeConfidence(input: InventoryItemInput): InventoryItemInput {
+  return {
+    ...input,
+    confidence: input.addedVia === 'photo' ? (input.confidence ?? null) : null,
+  };
+}
+
+/** The doc id shared writes to. Derivable, so no extra read to learn it. */
+function rowId(uid: string, key: ItemKey): string {
+  return `${uid}__${key}`;
+}
+
+const firestorePantry: PantryStore = {
+  isLocal: false,
+
+  async signIn() {
+    // Anonymous auth: a stable uid per browser, no account, no password. Every other
+    // method here reads that uid back out of the SDK via currentUid(), so this must
+    // resolve before any of them are called.
+    const user = await ensureSignedIn();
+    return user.uid;
+  },
+
+  subscribe(uid, onRows, onError) {
+    return subscribeToInventory(
+      (items) => onRows(items.map((item) => ({ ...item, id: rowId(uid, item.key) }))),
+      (err) => {
+        console.error('[pantry] listen failed', err);
+        // permission-denied here almost always means firestore.rules was never published
+        // to this project, or anonymous sign-in is still switched off. Both are one-time
+        // setup steps, and both look identical from inside the app, so say so.
+        onError?.(
+          err.code === 'permission-denied'
+            ? "Firestore rejected the request. Check that firestore.rules is published and anonymous sign-in is on (docs/SETUP.md)."
+            : "Couldn't reach your pantry.",
+        );
+      },
+    );
+  },
+
+  async upsertItem(_uid, input) {
+    return upsertItem(normalizeConfidence(input));
+  },
+
+  async upsertMany(_uid, inputs) {
+    // One writeBatch commit, not N round-trips: a shelf photo can produce fifteen items,
+    // and a half-applied pantry if the tab closes midway is worse than none.
+    return batchUpsertItems(inputs.map(normalizeConfidence));
+  },
+
+  async deleteItem(_uid, key) {
+    await removeItem(key);
+  },
+
+  async renameItem(_uid, previousKey, input) {
+    // Not a patch: the doc id derives from the key, and the rules freeze `key` on update,
+    // so shared does write-new-then-delete-old. See renameItem in shared/inventory.ts.
+    return renameItem(previousKey, normalizeConfidence(input));
+  },
+
+  async has(_uid, key) {
+    return has(key);
+  },
+
+  async getAllKeys() {
+    return getAllKeys();
+  },
+
+  async loadSample() {
+    // Upsert-by-key, so seeding twice is a no-op rather than fifteen duplicates.
+    await batchUpsertItems(SAMPLE.map((s) => ({ ...s, addedVia: 'manual' as const })));
+  },
+
+  async clearAll() {
+    // Scoped to the signed-in user by construction -- getAllKeys only ever returns keys
+    // this uid owns, and the rules would reject anything else.
+    const keys = await getAllKeys();
+    await Promise.all(keys.map((key) => removeItem(key)));
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Firestore unless you explicitly ask for the stub. Vite inlines this at build time, so
+ * the unused implementation is dropped from the production bundle.
+ */
+export const pantry: PantryStore =
+  import.meta.env.VITE_PANTRY === 'local' ? localPantry : firestorePantry;

@@ -21,6 +21,7 @@ import {
   setDoc,
   where,
   writeBatch,
+  type FirestoreError,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { currentUid, db } from './firebase.js';
@@ -186,13 +187,23 @@ export async function listItems(): Promise<InventoryItem[]> {
  * Real-time feed for the pantry UI. serverTimestamps:'estimate' fills the local-echo
  * null from serverTimestamp() so lists sorted on updatedAt don't flicker on write.
  * Grouping (location, then category) is the caller's job -- Firestore can't group.
+ *
+ * Pass onError. An onSnapshot listener without one swallows a failed listen into an
+ * unhandled console error, and the most likely failure here -- rules not published yet,
+ * so the very first listen is denied -- would otherwise leave a UI waiting on a first
+ * snapshot that is never coming, with nothing to show for it.
  */
 export function subscribeToInventory(
   callback: (items: InventoryItem[]) => void,
+  onError?: (error: FirestoreError) => void,
 ): Unsubscribe {
-  return onSnapshot(myItemsQuery(), (snap) => {
-    callback(
-      snap.docs.map((d) => d.data({ serverTimestamps: 'estimate' }) as InventoryItem),
-    );
-  });
+  return onSnapshot(
+    myItemsQuery(),
+    (snap) => {
+      callback(
+        snap.docs.map((d) => d.data({ serverTimestamps: 'estimate' }) as InventoryItem),
+      );
+    },
+    onError,
+  );
 }
