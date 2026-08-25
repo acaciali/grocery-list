@@ -24,6 +24,9 @@ service cloud.firestore {
       function mine() {
         return resource.data.userId == request.auth.uid;
       }
+      function ownsDocId(id) {
+        return id.split('__')[0] == request.auth.uid;
+      }
       function wellFormed() {
         return request.resource.data.key is string
             && request.resource.data.key.size() > 0
@@ -31,7 +34,14 @@ service cloud.firestore {
             && request.resource.data.userId is string;
       }
 
-      allow read: if signedIn() && mine();
+      // `get` is gated on the doc-ID prefix rather than resource.data: a missing doc has
+      // no resource (checking it errors), and has(key) must see "not found" for your own
+      // keys while probes of anyone else's IDs stay denied whether the doc exists or not.
+      allow get: if signedIn() && ownsDocId(id);
+
+      // `list` checks resource.data, so every query must filter
+      // where('userId', '==', uid) or Firestore rejects it outright.
+      allow list: if signedIn() && mine();
 
       allow create: if signedIn()
                     && wellFormed()
