@@ -11,6 +11,15 @@ export type Unit =
   | 'g' | 'kg' | 'oz' | 'lb' | 'ml' | 'l'
   | 'tsp' | 'tbsp' | 'cup' | 'clove' | 'can' | 'pkg';
 
+/**
+ * The runtime companion to `Unit`, for populating unit dropdowns. Kept next to the type so
+ * the two cannot drift: the annotation makes an unlisted or misspelled unit a compile error.
+ */
+export const UNITS: readonly Unit[] = [
+  'g', 'kg', 'oz', 'lb', 'ml', 'l',
+  'tsp', 'tbsp', 'cup', 'clove', 'can', 'pkg',
+];
+
 export type Category =
   | 'produce' | 'dairy' | 'meat' | 'seafood' | 'bakery'
   | 'pantry' | 'canned' | 'frozen' | 'spices'
@@ -99,6 +108,8 @@ export interface Recipe {
   ingredients: Item[];
   steps: string[];
   tags: string[];
+  /** Free-form cook's notes: swaps, provenance, what to serve it with. */
+  notes?: string;
   createdBy: string;
   createdAt: Timestamp;
 }
