@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Recipe Clipper</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <h1>Recipe Clipper</h1>
+
+    <div id="state-loading">
+      <p>Sniffing around for a recipe&hellip;</p>
+    </div>
+
+    <div id="state-empty" hidden>
+      <p>No recipe on this page &mdash; try a page with the full recipe on it.</p>
+      <button id="retry-empty">Look again</button>
+    </div>
+
+    <div id="state-error" hidden>
+      <p id="error-message">Something went wrong.</p>
+      <button id="retry-error">Try again</button>
+    </div>
+
+    <form id="state-review" hidden>
+      <label>🍲 Title
+        <input type="text" id="field-title" placeholder="Grandma's chili" />
+      </label>
+      <div class="row">
+        <label>🍽️ Servings
+          <input type="text" id="field-servings" placeholder="4" />
+        </label>
+        <label>⏱️ Total time
+          <input type="text" id="field-totalTime" placeholder="45 min" />
+        </label>
+      </div>
+      <div class="row">
+        <label>🔪 Prep time
+          <input type="text" id="field-prepTime" placeholder="15 min" />
+        </label>
+        <label>🔥 Cook time
+          <input type="text" id="field-cookTime" placeholder="30 min" />
+        </label>
+      </div>
+      <label>🥕 Ingredients <span class="hint">one per line</span>
+        <textarea id="field-ingredients" rows="6" placeholder="2 cups whole milk"></textarea>
+      </label>
+      <label>📋 Instructions <span class="hint">one per line</span>
+        <textarea id="field-instructions" rows="6" placeholder="Preheat the oven to 350&deg;F"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" id="cancel-review">Cancel</button>
+        <button type="submit" id="confirm-review">Looks good, save ✨</button>
+      </div>
+    </form>
+
+    <div id="state-saving" hidden>
+      <p>Tucking it into your recipe box&hellip;</p>
+    </div>
+
+    <div id="state-success" hidden>
+      <p>Saved!</p>
+      <button id="close-success">Done</button>
+    </div>
+  </div>
+
+  <script src="src/form-utils.js"></script>
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
