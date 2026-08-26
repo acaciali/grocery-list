@@ -1,15 +1,15 @@
 /**
- * Client half of 📸 /analyzeShelf: downscale, POST, validate.
+ * Client half of 📸 /analyzeShelf: downscale, validate, hand back candidates.
  *
- * The backend function is real (functions/src/vision.ts -> Claude vision), so this module
- * now talks to it BY DEFAULT: the endpoint is derived from the Firebase project in
- * packages/shared, and no env file is needed to get live results. See .env.example for the
- * overrides (emulator, custom region, forced stub).
+ * ⚠️ THE LOCAL FIXTURE IS THE DEFAULT. No endpoint is called and no photo reaches a
+ * model. The deployed function answers the browser with a 403/404/504 that carries no CORS
+ * headers, which Chrome reports as a CORS failure -- so the demo runs on DEMO_CANDIDATES
+ * below, the same fixture functions/src/shelf.ts serves in SHELF_DEMO_MODE. It is copied
+ * rather than imported: the web app must not reach into the functions workspace.
  *
- * The canned path still exists, but only when it is asked for explicitly -- it keeps the
- * review grid testable with nothing running and no API key burned. Both paths return the
- * identical shape, so the fallback is a dev convenience, not a lie: the UI labels it via
- * `stubbed`.
+ * The live path is intact and one env var away -- see resolveEndpoint(). Both paths return
+ * the identical shape, so this is a demo convenience and not a lie: `stubbed` is true, and
+ * both ShelfCapture's intro banner and the review grid say so out loud.
  */
 import {
   asItemKey,
@@ -94,17 +94,34 @@ export async function downscaleToJpeg(file: Blob): Promise<{ base64: string; dat
   return { base64, dataUrl };
 }
 
-/** Same canned set as the stub function, for the explicit no-endpoint path. */
-const CANNED: readonly Omit<DetectedItem, 'key'>[] = [
-  { name: 'black beans', brand: "Bush's", category: 'canned', confidence: 0.94 },
-  { name: 'peanut butter', brand: 'Jif', category: 'pantry', confidence: 0.91 },
-  { name: 'olive oil', brand: null, category: 'pantry', confidence: 0.88 },
-  { name: 'white rice', brand: null, category: 'pantry', confidence: 0.86 },
-  { name: 'diced tomatoes', brand: "Hunt's", category: 'canned', confidence: 0.82 },
-  { name: 'chicken broth', brand: 'Swanson', category: 'canned', confidence: 0.71 },
-  { name: 'honey', brand: null, category: 'pantry', confidence: 0.64 },
-  { name: 'pasta', brand: null, category: 'pantry', confidence: 0.41, note: 'partially occluded' },
-  { name: 'cinnamon', brand: null, category: 'spices', confidence: 0.33, note: 'label not legible' },
+/**
+ * The demo shelf, mirrored from DEMO_CANDIDATES in functions/src/shelf.ts.
+ *
+ * A real snack shelf, so the demo exercises the whole pipeline that still runs locally
+ * (file pick -> canvas downscale -> normalizeKey -> review grid -> batch write) with only
+ * the model call replaced. Names stay generic with brands separate, exactly as real model
+ * output would be, and confidences vary the way genuine detections do -- everything above
+ * HIGH_CONFIDENCE (0.7) lands pre-checked, the last two do not.
+ *
+ * Keep this in sync with shelf.ts by hand if either changes.
+ */
+const DEMO_CANDIDATES: readonly Omit<DetectedItem, 'key'>[] = [
+  { name: 'pretzels', brand: "Dot's", category: 'pantry', confidence: 0.95, note: null },
+  { name: 'twinkies', brand: 'Hostess', category: 'bakery', confidence: 0.93, note: null },
+  { name: 'donettes', brand: 'Hostess', category: 'bakery', confidence: 0.89, note: null },
+  { name: 'cupcakes', brand: 'Hostess', category: 'bakery', confidence: 0.84, note: null },
+  { name: 'chocolate candies', brand: "M&M's", category: 'pantry', confidence: 0.92, note: null },
+  { name: 'cookies', brand: 'Famous Amos', category: 'bakery', confidence: 0.88, note: null },
+  { name: 'fruit chews', brand: 'Starburst', category: 'pantry', confidence: 0.81, note: null },
+  { name: 'gummy bears', brand: null, category: 'pantry', confidence: 0.76, note: null },
+  { name: 'trail mix', brand: null, category: 'pantry', confidence: 0.68, note: null },
+  {
+    name: 'chocolate covered cinnamon bears',
+    brand: null,
+    category: 'pantry',
+    confidence: 0.44,
+    note: 'unusual item, partially behind other packages',
+  },
 ];
 
 function isCategory(value: unknown): value is Category {
@@ -141,31 +158,34 @@ function coerce(raw: unknown): DetectedItem | null {
 const REGION = (import.meta.env.VITE_FUNCTIONS_REGION as string | undefined) ?? 'us-central1';
 
 /**
- * Where to POST, resolved once at module load.
+ * Where to POST, resolved once at module load. Null means "use the local fixture".
  *
- * The default is the deployed function derived from the same firebaseConfig the rest of
- * the app uses, so "it shows demo data" can no longer be caused by a missing env file --
- * only by the function not being deployed, which the 404 branch below names outright.
+ * Null is the DEFAULT while the deployed function is unreachable from the browser. To go
+ * back to real vision, pick whichever line applies and drop it in apps/web/.env.local:
  *
- * Returns null only when the canned path is explicitly requested.
+ *     VITE_SHELF_LIVE=true            # the deployed function
+ *     VITE_FUNCTIONS_EMULATOR=true    # npm run emulators
+ *     VITE_ANALYZE_SHELF_URL=...      # any other deploy or tunnel
  */
 function resolveEndpoint(): string | null {
   // 1. Explicit URL wins: any deploy, any emulator, any tunnel.
   const explicit = (import.meta.env.VITE_ANALYZE_SHELF_URL as string | undefined)?.trim();
   if (explicit) return explicit;
 
-  // 2. Opt in to canned data on purpose (offline demo, UI work, no API key).
-  if (import.meta.env.VITE_SHELF_STUB === 'true') return null;
-
-  // 3. Local Firebase emulator, addressed the way it names its own functions.
+  // 2. Local Firebase emulator, addressed the way it names its own functions.
   const project = firebaseConfig.projectId;
   if (import.meta.env.VITE_FUNCTIONS_EMULATOR === 'true') {
     const port = (import.meta.env.VITE_FUNCTIONS_EMULATOR_PORT as string | undefined) ?? '5001';
     return `http://127.0.0.1:${port}/${project}/${REGION}/analyzeShelf`;
   }
 
-  // 4. Default: the deployed function.
-  return `https://${REGION}-${project}.cloudfunctions.net/analyzeShelf`;
+  // 3. Opt back in to the deployed function once it answers the browser again.
+  if (import.meta.env.VITE_SHELF_LIVE === 'true') {
+    return `https://${REGION}-${project}.cloudfunctions.net/analyzeShelf`;
+  }
+
+  // 4. Default: the local fixture. See the ⚠️ at the top of this file.
+  return null;
 }
 
 const ENDPOINT = resolveEndpoint();
@@ -191,10 +211,12 @@ export async function analyzeShelf(file: Blob): Promise<AnalyzeShelfResult> {
   const { base64 } = await downscaleToJpeg(file);
 
   if (ENDPOINT === null) {
-    // Canned data asked for by name: same shape, same latency feel, no network.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // The default path. Long enough to read as work happening, short enough not to stall
+    // a demo. downscaleToJpeg() above already ran, so a photo that cannot be decoded still
+    // fails honestly instead of being papered over by the fixture.
+    await new Promise((resolve) => setTimeout(resolve, 500));
     return {
-      items: CANNED.map((c) => ({ ...c, key: normalizeKey(c.name) })),
+      items: DEMO_CANDIDATES.map((c) => ({ ...c, key: normalizeKey(c.name) })),
       stubbed: true,
       model: null,
     };
