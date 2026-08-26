@@ -12,8 +12,15 @@ const GRAVITY = 0.0002; // px per ms squared
 
 const between = (min, max) => min + Math.random() * (max - min);
 
+let active = null;
+
 export function startSparkleCursor(options = {}) {
   if (typeof document === 'undefined') return () => {};
+
+  // Vite re-runs the entry module on every HMR update, and a page can load this
+  // more than once. Without tearing the previous trail down first, the layers
+  // and pointer listeners stack up for the rest of the session.
+  if (active) active();
 
   const {
     colors = PALETTE,
@@ -24,6 +31,7 @@ export function startSparkleCursor(options = {}) {
     maxSize = 12,
   } = options;
 
+  const poolLimit = Math.max(1, maxSparkles);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const layer = document.createElement('div');
@@ -35,22 +43,10 @@ export function startSparkleCursor(options = {}) {
     pointerEvents: 'none',
     zIndex: '2147483000',
   });
+  document.body.appendChild(layer);
 
   const sparkles = [];
-  for (let i = 0; i < maxSparkles; i += 1) {
-    const el = document.createElement('div');
-    Object.assign(el.style, {
-      position: 'absolute',
-      top: '0',
-      left: '0',
-      opacity: '0',
-      clipPath: STAR,
-      willChange: 'transform, opacity',
-    });
-    layer.appendChild(el);
-    sparkles.push({ el, age: lifetime, x: 0, y: 0, vx: 0, vy: 0, size: 0, angle: 0, spin: 0 });
-  }
-  document.body.appendChild(layer);
+  const idle = [];
 
   let next = 0;
   let lastX = null;
@@ -59,12 +55,35 @@ export function startSparkleCursor(options = {}) {
   let frame = 0;
   let previous = 0;
 
-  function spawn(x, y) {
-    let sparkle = sparkles.find((candidate) => candidate.age >= lifetime);
-    if (!sparkle) {
-      sparkle = sparkles[next];
-      next = (next + 1) % sparkles.length;
+  // Grown on demand rather than allocated up front: the trail can only ever
+  // show as many sparkles as the pointer actually earns, and a reader with
+  // prefers-reduced-motion never pays for a single node.
+  function acquire() {
+    const reusable = idle.pop();
+    if (reusable) return reusable;
+
+    if (sparkles.length < poolLimit) {
+      const el = document.createElement('div');
+      Object.assign(el.style, {
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        opacity: '0',
+        clipPath: STAR,
+      });
+      layer.appendChild(el);
+      const sparkle = { el, age: lifetime, x: 0, y: 0, vx: 0, vy: 0, size: 0, angle: 0, spin: 0 };
+      sparkles.push(sparkle);
+      return sparkle;
     }
+
+    const oldest = sparkles[next];
+    next = (next + 1) % sparkles.length;
+    return oldest;
+  }
+
+  function spawn(x, y) {
+    const sparkle = acquire();
     sparkle.age = 0;
     sparkle.x = x;
     sparkle.y = y;
@@ -88,6 +107,7 @@ export function startSparkleCursor(options = {}) {
       sparkle.age += delta;
       if (sparkle.age >= lifetime) {
         sparkle.el.style.opacity = '0';
+        idle.push(sparkle);
         continue;
       }
       alive += 1;
@@ -133,9 +153,13 @@ export function startSparkleCursor(options = {}) {
 
   window.addEventListener('pointermove', onPointerMove, { passive: true });
 
-  return function stop() {
+  function stop() {
+    if (active === stop) active = null;
     window.removeEventListener('pointermove', onPointerMove);
     if (frame) cancelAnimationFrame(frame);
     layer.remove();
-  };
+  }
+
+  active = stop;
+  return stop;
 }
