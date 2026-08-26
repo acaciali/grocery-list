@@ -35,9 +35,24 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-button {
-  font: inherit;
+/* Cursors for anything clickable. Browsers only hand out the pointer cursor for
+   links by default -- buttons, selects and checkbox labels get the plain arrow --
+   so we add it back once here rather than per component. Mirrored in the React
+   app's index.css; keep the two in sync. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+select:not(:disabled),
+summary,
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]) {
   cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 input,
@@ -90,7 +105,6 @@ button {
   color: var(--accent-ink);
   font-weight: 700;
   font-size: 16px;
-  cursor: pointer;
   box-shadow: var(--shadow);
 }
 
@@ -121,7 +135,6 @@ button {
   border: none;
   background: transparent;
   text-align: left;
-  cursor: pointer;
   font: inherit;
   color: inherit;
   width: 100%;
@@ -173,7 +186,6 @@ button {
   padding: 0 18px;
   font-size: 22px;
   line-height: 1;
-  cursor: pointer;
   align-self: stretch;
 }
 
@@ -196,7 +208,6 @@ button {
   padding: 10px 20px;
   font: inherit;
   font-weight: 600;
-  cursor: pointer;
 }
 
 /* --- Status / toast --- */
