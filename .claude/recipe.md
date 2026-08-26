@@ -99,39 +99,63 @@ money to run `Set.has()`. It lives in shared alongside `inventory.ts` instead.
 Default is `'missing'` because a 20-ingredient curry you have 15 of is not dinner, and a
 3-ingredient pasta you have all of is.
 
-### Frontend — todo
+### Frontend — ✅ done
 
-Build in this order; each step is demoable on its own.
+Built in this order; each step demoable on its own. Lives at `/recipe/cook`, reached from
+the cookbook.
 
-- [ ] **1. `useRecipeMatches()` hook** in `routes/recipe/`
-  - Two subscriptions, not `findRecipeMatches()` — the list must re-rank the moment
-    someone adds milk on the Inventory tab. That live re-rank *is* the demo.
-  - `subscribeToRecipes` + `subscribeToInventory`, hold both in state, run
-    `matchRecipes()` in a `useMemo` over the pair
-  - `loading` stays true until **both** have delivered a first snapshot
-  - Pass `onError` to both — a failed listen never sends a first snapshot, so without it
-    the screen waits forever (same trap `useInventory` already documents)
-  - Build the pantry `Set` in the memo, not per recipe
-- [ ] **2. "Cook from my pantry" view** — new route section under `routes/recipe/`
-  - Recipe card: title, image, **`have`/`total` badge**, and the missing items by name
-  - "You have 5 of 7 — you need: cumin, lime" reads better than any percentage
-  - Sort control wired to the three `MatchSort` modes, default `'missing'`
-  - Filter chips: **Cook now** (`maxMissing: 0`) · **One stop** (`maxMissing: 2`) · All
-  - Pass `minMatches: 1` so recipes sharing nothing with the pantry stay off the list
-- [ ] **3. Staples toggle** — "Assume I have salt, pepper and water" (default **on**)
-  - Pass `COMMON_STAPLES` as `assumedKeys` when checked
-  - ⚠️ Render `via: 'assumed'` ingredients differently from `via: 'pantry'` — a dotted
-    underline, a "probably" tooltip, anything. The badge must never claim the pantry
-    holds something nobody logged. Same rule as the shelf-photo review grid.
-- [ ] **4. Empty and near-empty states**
-  - Empty pantry → "Add a few things to your pantry and we'll find you something"
-    linking to Inventory, *not* a list of every recipe scored 0
-  - Empty cookbook → link to the import/manual-entry form
-  - Nothing above the `maxMissing` filter → offer to widen it rather than showing nothing
-- [ ] **5. I1 handoff** — "Add the missing items to my grocery list"
-  - `missingAcross()` on the selected recipes → one de-duped write
-  - `source: 'recipe'`, `sourceId: recipe.id` so items stay traceable
-  - Confirm what was added vs. already on the list
+- [x] **1. `useRecipeMatches()` hook** — `routes/recipe/useRecipeMatches.ts`
+  - Two subscriptions, not `findRecipeMatches()`: `useRecipes` + `useInventory`, with
+    `matchRecipes()` in a `useMemo` over the pair. Add milk on the Pantry tab and the list
+    re-ranks while you watch it.
+  - The pantry side goes through `useInventory()` → the `pantry` store, **not**
+    `subscribeToInventory()` directly. That store is the seam that makes `VITE_PANTRY=local`
+    work; going around it would make this the one screen you cannot develop offline.
+  - `loading` stays true until both feeds deliver a first snapshot; both underlying hooks
+    already pass `onError`, so a failed listen clears `loading` instead of hanging.
+  - An unreadable pantry blocks the screen rather than ranking against an empty Set —
+    "you have none of this" is a confident wrong answer.
+  - `maxMissing` is deliberately *not* a hook option, so the view can still count what sits
+    just outside the filter and offer to widen it (step 4).
+- [x] **2. "Cook from my pantry" view** — `routes/recipe/CookFromPantryPage.tsx`
+  - Card: title, image, `have`/`total` badge, and "You have 5 of 7 — you need: cumin, lime"
+  - Sort control over all three `MatchSort` modes, labelled as the question rather than the
+    metric ("Fewest to buy", not `missingCount` ascending)
+  - Chips **Cook now** (0) · **One stop** (≤2) · **All**, defaulting to One stop — Cook now
+    alone is empty on a thin pantry and reads as a broken screen. Counts come off the full
+    ranked list, so "Cook now 0" says there is nothing rather than looking like a bug.
+  - `minMatches: 1`, so recipes sharing nothing with the pantry stay on `/recipe`
+- [x] **3. Staples toggle** — default **on**, passes `COMMON_STAPLES` as `assumedKeys`
+  - `via: 'assumed'` ingredients render as their own dotted-underline line and are never
+    folded into the badge. Same rule as the shelf-photo review grid: a guess reads as a guess.
+- [x] **4. Empty and near-empty states** — four, each pointing somewhere
+  - no cookbook → new recipe · empty pantry → add to pantry · nothing overlapping → add
+    more staples · nothing inside the filter → a button that widens it
+- [x] **5. I1 handoff** — select recipes, one `addRecipeIngredients()` call per selected
+      recipe with that recipe's **disjoint** share of the list
+  - `planMissingByRecipe()` in `cookFromPantry.ts` is `missingAcross()`'s de-dupe with the
+    attribution kept, so a shared ingredient is bought once *and* every row still lands with
+    a `sourceId` tracing to a real recipe. A single combined write would have to pick one
+    recipe id and lie about the rest.
+  - Writes are sequential, not `Promise.all` — `planAdds` re-reads the list to decide
+    add-vs-merge, so a concurrent call would plan against rows the first had not written yet.
+  - No confirm sheet here, unlike the detail view: that sheet exists to *show* the pantry
+    cross-check, and on this screen the cross-check is the screen.
+- [x] Tests on the pure helpers: `cookFromPantry.test.ts` (`npm test -w apps/web`, node env)
+
+### Also done here — the `data() as Recipe` casts are gone
+
+`useRecipes` and `RecipeDetailPage` each had their own `onSnapshot` / `getDoc` plus a cast.
+Both now go through `subscribeToRecipes` / `getRecipe`, so every document passes through
+`toRow()`. Legacy recipes open with a real title and with keys derived from their ingredient
+names — which is what lets the existing add-to-groceries sheet match them at all.
+
+### ⚠️ Raise on the shared side
+
+`missingAcross()` keys its Map on `item.key`, so **every keyless ingredient collapses under
+`undefined`** and only the first survives. Unreachable through `toRow()`, which derives a key
+on read, but a hand-edited document would silently lose ingredients off a shopping list.
+`planMissingByRecipe()` keeps them instead, with a test standing on the divergence.
 
 ### ⚠️ Two writers, one `recipes` collection — schema drift is already here
 
