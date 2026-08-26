@@ -65,6 +65,8 @@ export default function App() {
         </nav>
       </header>
       <main className="flex-1 pb-6">
+        {/* Hidden until anonymous auth is enabled for grocery-list-3dd86 (Firebase console →
+            Authentication → Sign-in method → Anonymous). Until then it fires on every load.
         {authFailed && (
           <p
             role="status"
@@ -72,7 +74,7 @@ export default function App() {
           >
             Signed out — your list still works, but saved preferences won&apos;t stick.
           </p>
-        )}
+        )} */}
         <Routes>
           <Route path="/" element={<Navigate to="/grocery" replace />} />
           <Route path="/recipe" element={<RecipeListPage />} />
