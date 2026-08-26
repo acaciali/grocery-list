@@ -15,7 +15,7 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://api.example.com/*"
+    "https://firestore.googleapis.com/*"
   ],
   "icons": {
     "16": "icons/icon16.png",

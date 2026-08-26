@@ -1,11 +1,20 @@
 {
-  "name": "recipe-clipper",
+  "name": "@grocery/recipe-clipper",
   "private": true,
   "version": "0.1.0",
-  "description": "Chrome extension that clips a recipe from the current page.",
-  "//": "type=commonjs opts out of the root package.json's type=module -- the extension scripts are plain classic scripts loaded by <script> tags, and the tests use require().",
-  "type": "commonjs",
+  "description": "Chrome extension that clips a recipe from the current page into the recipe box.",
+  "type": "module",
   "scripts": {
-    "test": "node test/recipe-parser.test.js && node test/form-utils.test.js"
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@grocery/shared": "*",
+    "firebase": "^10.13.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0",
+    "vitest": "^2.1.5"
   }
 }
