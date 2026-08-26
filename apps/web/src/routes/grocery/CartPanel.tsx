@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Timestamp } from 'firebase/firestore';
-import type { Modality } from './api';
+import { isDemoStore, type Modality } from './api';
+import DemoBadge from './DemoBadge';
 import { BLOCKED_LABEL, planSend, planTotal } from './cartPlan';
 import type { Row } from './data';
 import { useCartSend } from './useCartSend';
@@ -120,6 +121,7 @@ export default function CartPanel({ items, locationId, storeName, uid }: Props) 
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="cart-panel-title" className="text-xs font-bold uppercase tracking-wide text-ink-soft">
           Send to {storeName ?? 'your store'}
+          {isDemoStore && <DemoBadge />}
         </h2>
         <div role="group" aria-label="How you're getting it" className="flex gap-1">
           {MODALITIES.map(({ value, label }) => (
@@ -151,8 +153,9 @@ export default function CartPanel({ items, locationId, storeName, uid }: Props) 
       ) : needsLink ? (
         <>
           <p className="mt-2 text-sm text-ink-soft">
-            Prices come from the store, but putting things in a cart needs your permission
-            on Kroger&apos;s own site.
+            {isDemoStore
+              ? 'This build has no store connection, so linking is a walkthrough of the real one. Nothing reaches Kroger.'
+              : "Prices come from the store, but putting things in a cart needs your permission on Kroger's own site."}
           </p>
           <button
             type="button"
@@ -160,7 +163,11 @@ export default function CartPanel({ items, locationId, storeName, uid }: Props) 
             disabled={link.busy}
             className="mt-2 min-h-12 w-full rounded-card bg-accent font-semibold text-white disabled:opacity-50"
           >
-            {link.busy ? 'Opening Kroger…' : 'Link your Kroger account'}
+            {isDemoStore
+              ? 'Try linking (demo)'
+              : link.busy
+                ? 'Opening Kroger…'
+                : 'Link your Kroger account'}
           </button>
         </>
       ) : (
@@ -179,8 +186,9 @@ export default function CartPanel({ items, locationId, storeName, uid }: Props) 
           </button>
           {count > 0 && (
             <p className="mt-1.5 text-center text-xs text-ink-soft">
-              Adds to your Kroger cart. It can&apos;t be undone from here — remove things in
-              the Kroger app.
+              {isDemoStore
+                ? 'Nothing leaves this page. No cart is created and no order is placed.'
+                : "Adds to your Kroger cart. It can't be undone from here — remove things in the Kroger app."}
             </p>
           )}
         </>
@@ -193,7 +201,12 @@ export default function CartPanel({ items, locationId, storeName, uid }: Props) 
           <p
             className={`text-sm font-medium ${outcome.kind === 'ok' ? 'text-ink' : 'text-warn'}`}
           >
-            {outcome.message}{' '}
+            {outcome.message}
+            {/* "Sent 4 items to your cart" is the one line someone could read as "my
+                groceries are ordered". It does not get to stand alone in demo mode. */}
+            {isDemoStore && outcome.kind !== 'error' && (
+              <span className="font-normal text-ink-soft"> Demo only — no real cart was touched.</span>
+            )}{' '}
             <button
               type="button"
               onClick={clearOutcome}

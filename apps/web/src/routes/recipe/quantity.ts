@@ -5,6 +5,7 @@
  * Lives in routes/recipe/ rather than packages/shared because only the recipe form needs
  * it today. Promote it to shared if the import path or Inventory ends up wanting it too.
  */
+import type { Item } from '@grocery/shared';
 
 /** Unicode vulgar fractions, which recipe.md flags as arriving from scraped pages. */
 const VULGAR_FRACTIONS = new Map<string, string>([
@@ -81,4 +82,59 @@ export function parseWholeNumber(raw: string): QuantityResult {
   const value = Number(text);
   if (value < 1) return { ok: false, reason: 'must be at least 1' };
   return { ok: true, value };
+}
+
+/**
+ * The denominators cooking actually uses. A recipe says "3/4 cup", never "0.75 cup", so
+ * displaying the stored number raw would be a worse read than what the cook typed in.
+ */
+const COOKING_FRACTIONS: readonly (readonly [number, number])[] = [
+  [1, 2],
+  [1, 3], [2, 3],
+  [1, 4], [3, 4],
+  [1, 5], [2, 5], [3, 5], [4, 5],
+  [1, 6], [5, 6],
+  [1, 8], [3, 8], [5, 8], [7, 8],
+];
+
+/**
+ * Wide enough to absorb parseQuantity's 3-decimal rounding (1/3 stores as 0.333, off by
+ * 0.00033) and far narrower than the closest gap between two entries above (0.025, between
+ * 3/5 and 5/8), so a value can never match the wrong fraction.
+ */
+const FRACTION_TOLERANCE = 0.005;
+
+/**
+ * The display inverse of parseQuantity: 1.5 -> "1 1/2", 0.333 -> "1/3", 2 -> "2".
+ *
+ * A value that is not a recognizable cooking fraction falls back to a 2-decimal number
+ * rather than being forced into the nearest one -- inventing "1/3" for 0.31 would be
+ * quietly changing the recipe.
+ */
+export function formatQuantity(value: number): string {
+  const whole = Math.floor(value);
+  const remainder = value - whole;
+
+  if (remainder < FRACTION_TOLERANCE) return String(whole);
+
+  for (const [numerator, denominator] of COOKING_FRACTIONS) {
+    if (Math.abs(remainder - numerator / denominator) < FRACTION_TOLERANCE) {
+      const fraction = `${numerator}/${denominator}`;
+      return whole === 0 ? fraction : `${whole} ${fraction}`;
+    }
+  }
+
+  return String(Math.round(value * 100) / 100);
+}
+
+/**
+ * "1 1/2 cup" -- the measurement half of an ingredient line, blank when unmeasured.
+ *
+ * Shared by the detail view and the add-to-groceries sheet so an ingredient reads the same
+ * in both places; a cook comparing the two should not have to wonder whether "0.5" and
+ * "1/2" are the same amount.
+ */
+export function formatMeasure(item: Pick<Item, 'quantity' | 'unit'>): string {
+  const amount = item.quantity == null ? '' : formatQuantity(item.quantity);
+  return [amount, item.unit ?? ''].filter(Boolean).join(' ');
 }

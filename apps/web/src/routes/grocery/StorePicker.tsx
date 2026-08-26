@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { StoreLocation } from '@grocery/shared';
-import { findStores } from './api';
+import { findStores, isDemoStore } from './api';
 import type { ConnectedStore } from './useStore';
 
 /**
@@ -82,7 +82,9 @@ export default function StorePicker({
               Choose your store
             </h2>
             <p className="mt-0.5 text-sm text-ink-soft">
-              Prices and availability are per store.
+              {isDemoStore
+                ? 'Sample stores — this build has no connection to a real one.'
+                : 'Prices and availability are per store.'}
             </p>
           </div>
           <button

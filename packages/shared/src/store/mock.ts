@@ -1,4 +1,4 @@
-import type { StoreLocation, StoreProduct } from '@grocery/shared/types';
+import type { StoreLocation, StoreProduct } from '../types.js';
 import type { CartLine, Modality, StoreAdapter } from './adapter.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

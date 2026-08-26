@@ -2,7 +2,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import type { StoreMatch, StoreProduct } from '@grocery/shared/types';
 import { adapter } from './stores/select.js';
 import { readProductPref, readSearchCache, writeProductPref, writeSearchCache } from './stores/cache.js';
-import { toMatch } from './stores/matching.js';
+import { fromRemembered, toMatch } from '@grocery/shared/store';
 import { fail, requireParam, requirePost } from './http.js';
 
 export const findStores = onRequest({ cors: true }, async (req, res) => {
@@ -76,19 +76,7 @@ export const resolveItems = onRequest({ cors: true }, async (req, res) => {
       items.map(async (item): Promise<[string, StoreMatch]> => {
         // Your own previous pick for this exact text wins over any fresh search.
         const remembered = uid ? await readProductPref(uid, item.name) : null;
-        if (remembered) {
-          return [
-            item.id,
-            {
-              status: remembered.stockLevel === 'TEMPORARILY_OUT_OF_STOCK' ? 'unavailable' : 'matched',
-              locationId,
-              product: remembered,
-              confidence: 1,
-              chosenBy: 'memory',
-              cartQuantity: 1,
-            },
-          ];
-        }
+        if (remembered) return [item.id, fromRemembered(remembered, locationId)];
         const products = await cachedSearch(item.name, locationId);
         return [item.id, toMatch(item.name, products, locationId)];
       }),

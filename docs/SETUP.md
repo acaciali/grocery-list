@@ -94,6 +94,11 @@ list and the same pantry, live. There are no accounts and no sign-in:
 one project is one household. To share the list with others, the simplest path is the web
 deployment below, so that nobody has to run a dev server.
 
+The Grocery tab's store features work now, against a demo store built into the
+app: connect a store with any ZIP, and search, prices, matching, and sending all
+run. They are labelled **Demo**, because the products are fixtures rather than
+anything Kroger sells. Step 8 explains what real store data costs and why.
+
 ## Step 7 (optional): Deploy to GitHub Pages
 
 This gives you one URL that works on every phone and laptop.
@@ -112,23 +117,58 @@ Anyone with this URL can read and write your grocery list. That is the
 intended trade-off of this simple setup: convenient for a small trusted
 group, not suitable for sensitive data.
 
-## Step 8 (optional): send your list to a Kroger cart
+## Step 8 (optional): connect a real Kroger store
 
-The grocery list can push its matched items into a real Kroger cart. Nothing
-below is needed for the list, prices, or product search in mock mode — only
-for writing to a live cart.
+Everything in the Grocery tab works after Step 6, with one honest limitation: the
+store is a demo. Search, matching, prices, the account link, and sending all run,
+but every product comes from a fixture table that ships with the app, and nothing
+ever reaches Kroger. The app labels this: a **Demo** badge sits next to the store
+name and the send panel, and a send says so in as many words.
+
+That demo is not a shortcut — it is what the free Firebase Spark plan allows.
+Reaching Kroger for real needs a server, because Kroger's API requires a client
+secret that would be public in browser JavaScript and sends no CORS headers to a
+browser anyway. Our server is the Cloud Functions in `functions/`, and
+**deploying any Cloud Function requires the pay-as-you-go Blaze plan.** So live
+store data costs a billing account; the demo store costs nothing.
+
+If that trade is fine, skip this step. Nothing else in the app depends on it.
+
+### Turning on the live store
+
+1. Upgrade the project to Blaze in the Firebase console
+   (**⚙️ → Usage and billing → Details & settings**). Blaze includes a monthly
+   free allotment far larger than this app uses, but it does require a card.
+2. Register an app at the [Kroger developer portal](https://developer.kroger.com)
+   to get `KROGER_CLIENT_ID` and `KROGER_CLIENT_SECRET`. Product and location
+   data need no more than this.
+3. Copy `functions/.env.example` to `functions/.env` and fill those in.
+4. Deploy: `npm run deploy:functions`.
+5. Point the app at the functions instead of the demo, in `apps/web/.env.local`:
+
+   ```sh
+   VITE_STORE_MODE=functions
+   ```
+
+   Rebuild and redeploy the frontend for this to take effect — Vite compiles env
+   values into the bundle. Leaving it unset, or setting `local`, keeps the demo
+   store, which is the default everywhere.
+
+To develop against the functions without deploying, run `npm run emulators` and
+set the same flag; the emulator runs on your machine and needs no billing.
+
+### Also sending to a real cart
 
 Cart writes need *your* permission on Kroger's own site, which is a different
-grant from the one behind product search. Setting it up means:
+grant from the one behind product search. That is why search is the baseline and
+cart is the extra. Setting it up means:
 
-1. Register an app at the [Kroger developer portal](https://developer.kroger.com)
-   and request the `cart.basic:write` scope.
+1. Request the `cart.basic:write` scope for the app you registered above.
 2. Register a redirect URI there. It must match, exactly, the value you put in
    `functions/.env` as `KROGER_REDIRECT_URI`:
    - local: `http://127.0.0.1:5001/YOUR-PROJECT-ID/us-central1/krogerCallback`
    - deployed: `https://us-central1-YOUR-PROJECT-ID.cloudfunctions.net/krogerCallback`
-3. Copy `functions/.env.example` to `functions/.env` and fill in
-   `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` and `KROGER_REDIRECT_URI`.
+3. Add `KROGER_REDIRECT_URI` to `functions/.env`.
 4. Set `APP_ALLOWED_ORIGINS` to the origins the app is served from, comma
    separated, for example `https://YOUR-USERNAME.github.io`. This is the
    allowlist for where Kroger's callback may send the browser back to, so an
@@ -144,8 +184,9 @@ reports what it sent and when, and cannot show you what is in your cart —
 check the Kroger app for that. And sending the same item twice adds it twice;
 items already sent are excluded from the next send for exactly that reason.
 
-Without credentials, everything above still runs against a built-in mock store,
-including the full linking round trip. That is the default on a fresh clone.
+Without credentials, the functions themselves still answer from the same mock
+store the browser uses, linking round trip included — so a deployed function with
+no Kroger app behind it is testable rather than broken.
 
 ## Step 9 (optional): Enable the shelf scanner
 
@@ -154,9 +195,11 @@ candidate pantry items. The frontend needs no configuration for this: it posts t
 the `analyzeShelf` Cloud Function for the `projectId` in
 `packages/shared/src/firebase-config.ts`. What it needs is that function to exist.
 
-This is the one feature that requires the pay-as-you-go Blaze plan, because it
-deploys a Cloud Function. It also needs an
+Like the live store in Step 8, this needs the pay-as-you-go Blaze plan, because
+it deploys a Cloud Function. It also needs an
 [Anthropic API key](https://console.anthropic.com), which is billed separately.
+Unlike the store, there is no in-browser substitute that does the real work: this
+one calls a model, so the free-plan fallback is canned data (see below).
 
 1. Upgrade the project to Blaze in the Firebase console
    (**⚙️ → Usage and billing → Details & settings**).
@@ -205,11 +248,27 @@ Inventory tab work with no function deployed at all.
 
 ## Costs
 
-Everything above runs on the free Firebase Spark plan. Its Firestore
-quotas (50,000 reads and 20,000 writes per day) are far more than personal
-use needs. The optional Cloud Functions in `functions/` are the one exception:
-deployment of functions requires the pay-as-you-go Blaze plan. The grocery,
-pantry, and recipe features work without them.
+**Steps 1 to 7 cost nothing, and that is the whole app.** The free Firebase Spark
+plan covers Firestore and anonymous sign-in, which is all the browser talks to.
+Its quotas — 50,000 document reads and 20,000 writes per day — are far more than a
+household uses. GitHub Pages hosting is free too.
+
+On that free setup you get: the grocery list, the pantry, recipes, the recipe
+clipper, and the whole grocery store surface — search, matching, cart planning,
+sending — answered by a demo store inside the browser and labelled as such.
+
+Two optional things need the pay-as-you-go **Blaze** plan, both for the same
+reason: they deploy Cloud Functions, and Spark cannot deploy a function at all.
+
+| Optional feature | Why it needs a server |
+|---|---|
+| Live Kroger store data and cart (Step 8) | Kroger's API needs a client secret, and blocks browsers with no CORS headers |
+| 📸 Shelf scanner (Step 9) | The Anthropic API key must never be in browser JavaScript |
+
+Blaze includes a monthly free allotment — 2 million function invocations, well
+past anything this app does — so the practical cost of enabling them is usually
+$0 plus Anthropic's own per-request charge for the scanner. It does require a card
+on file, which is the real reason it is optional here rather than the default.
 
 ## Troubleshooting
 
@@ -222,6 +281,12 @@ pantry, and recipe features work without them.
 - **A blank page on GitHub Pages**: the `--base` path in
   `.github/workflows/deploy.yml` does not match the repository name. See
   Step 7.
+- **The store says "Demo" and the products look invented**: they are. That is
+  the free-plan store, and it is the default. Step 8 is how you replace it.
+- **`VITE_STORE_MODE=functions` and now the store is broken**: the app is asking
+  a Cloud Function that is not there. Either deploy it and stay on Blaze
+  (Step 8), run `npm run emulators` for local work, or drop the flag to go back
+  to the demo store.
 - **The shelf scanner says "isn't deployed yet"**: the `analyzeShelf` function
   is not deployed to this project. See Step 9, or set `VITE_SHELF_STUB=true` in
   `apps/web/.env.local` to use the demo shelf.

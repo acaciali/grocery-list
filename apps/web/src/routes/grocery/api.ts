@@ -1,152 +1,66 @@
-import { firebaseConfig } from '@grocery/shared';
-import type { StoreLocation, StoreMatch, StoreProduct } from '@grocery/shared';
+/**
+ * Which store implementation the grocery route talks to.
+ *
+ * Two modes, because of one platform fact: **deploying a Cloud Function requires the paid
+ * Blaze plan.** On the free Spark plan there is no server, so the store has to run in the
+ * page or not at all.
+ *
+ *   local     (default) -- mock fixtures in the browser. Works on Spark, works on static
+ *                          hosting, works offline. Cannot reach Kroger.
+ *   functions           -- HTTP to our Cloud Functions, which is the only path to live
+ *                          Kroger. Needs Blaze, plus Kroger credentials for real data.
+ *
+ * `local` is the default so that a fresh clone and a GitHub Pages deploy both work with no
+ * configuration, and so local development shows what the deployed app actually does. Opt
+ * into the other mode in `apps/web/.env.local`:
+ *
+ *   VITE_STORE_MODE=functions       # + npm run emulators, or a deployed project
+ *
+ * Setting VITE_FUNCTIONS_BASE implies it too -- naming a backend is asking to use it.
+ *
+ * Every call site imports from this module and none of them know which mode is live. The
+ * one thing they must respect is `isDemoStore`: fixture prices presented as real ones is
+ * the failure mode this whole seam has to avoid.
+ */
+import { functionsStore } from './functionsStore';
+import { localStore } from './localStore';
+import type { StoreApi } from './storeApi';
+
+export {
+  ApiError,
+  MAX_CART_LINES,
+  RESOLVE_BATCH_LIMIT,
+  type Modality,
+  type ResolveInput,
+  type SendInput,
+  type SendLine,
+  type SendLineResult,
+  type SendResult,
+} from './storeApi';
+
+export type StoreMode = 'local' | 'functions';
+
+function resolveMode(): StoreMode {
+  const configured = import.meta.env.VITE_STORE_MODE;
+  if (configured === 'functions' || configured === 'local') return configured;
+  return import.meta.env.VITE_FUNCTIONS_BASE ? 'functions' : 'local';
+}
+
+export const storeMode: StoreMode = resolveMode();
 
 /**
- * In dev this points at the Functions emulator regardless of VITE_USE_EMULATORS --
- * unlike Firestore, there is no prod fallback for our own endpoints until first deploy.
+ * True when every product, price, and store on screen is a fixture. The UI is required to
+ * label this -- same rule the shelf scanner follows for its stub data, for the same reason:
+ * a canned result must never be mistaken for a real one.
  */
-const BASE =
-  import.meta.env.VITE_FUNCTIONS_BASE ??
-  (import.meta.env.DEV
-    ? `http://127.0.0.1:5001/${firebaseConfig.projectId}/us-central1`
-    : `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`);
+export const isDemoStore = storeMode === 'local';
 
-/**
- * Carries the HTTP status through, because one status is load-bearing: addToCart answers
- * 401 when the user's Kroger authorization is missing or dead, and that is a "link your
- * account" prompt rather than an error message.
- */
-export class ApiError extends Error {
-  readonly status: number;
+const impl: StoreApi = storeMode === 'functions' ? functionsStore : localStore;
 
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init);
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new ApiError(body?.error ?? `${path} failed (${res.status})`, res.status);
-  }
-  return res.json() as Promise<T>;
-}
-
-function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  return request<T>(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
-}
-
-export function findStores(zip: string, signal?: AbortSignal): Promise<StoreLocation[]> {
-  return request<{ stores: StoreLocation[] }>(`/findStores?zip=${encodeURIComponent(zip)}`, {
-    signal,
-  }).then((b) => b.stores);
-}
-
-export function searchProducts(
-  q: string,
-  locationId: string,
-  signal?: AbortSignal,
-): Promise<StoreProduct[]> {
-  return request<{ products: StoreProduct[] }>(
-    `/searchProducts?q=${encodeURIComponent(q)}&locationId=${encodeURIComponent(locationId)}`,
-    { signal },
-  ).then((b) => b.products);
-}
-
-export interface ResolveInput {
-  id: string;
-  name: string;
-}
-
-/** The server caps a batch at 50; callers must slice before calling. */
-export const RESOLVE_BATCH_LIMIT = 50;
-
-export function resolveItems(
-  locationId: string,
-  items: ResolveInput[],
-  uid: string | null,
-  signal?: AbortSignal,
-): Promise<Record<string, StoreMatch>> {
-  return post<{ matches: Record<string, StoreMatch> }>(
-    '/resolveItems',
-    { locationId, uid: uid ?? undefined, items },
-    signal,
-  ).then((b) => b.matches);
-}
-
-/**
- * Teach the resolver what this user meant by a piece of text. Best-effort: a failure
- * costs a better guess next time, never the choice the user just made.
- */
-export function rememberChoice(
-  uid: string,
-  term: string,
-  product: StoreProduct,
-): Promise<void> {
-  return post<{ ok: true }>('/rememberChoice', { uid, term, product }).then(() => undefined);
-}
-
-// --- Cart ------------------------------------------------------------------------------
-
-/** Pickup or delivery. Kroger wants it per cart-add call, not per account. */
-export type Modality = 'PICKUP' | 'DELIVERY';
-
-/** Mirrors MAX_LINES in functions/src/cart-lines.ts. Callers must slice before sending. */
-export const MAX_CART_LINES = 100;
-
-export interface SendLine {
-  itemId: string;
-  upc: string;
-  quantity: number;
-}
-
-export interface SendLineResult {
-  itemId: string;
-  ok: boolean;
-  error?: string;
-}
-
-export interface SendResult {
-  batchId: string;
-  results: SendLineResult[];
-}
-
-/** Whether this user has live Kroger authorization. Cart writes need it; search does not. */
-export function krogerLinked(uid: string, signal?: AbortSignal): Promise<boolean> {
-  return request<{ linked: boolean }>(`/krogerStatus?uid=${encodeURIComponent(uid)}`, {
-    signal,
-  }).then((b) => b.linked);
-}
-
-/**
- * The URL to send the browser to for Kroger's consent screen. `redirect` is where the
- * callback returns the user afterwards, and the server checks it against an origin
- * allowlist -- an unlisted origin is a 400, not a silent redirect somewhere else.
- */
-export function krogerAuthUrl(uid: string, redirect: string): Promise<string> {
-  return request<{ url: string }>(
-    `/krogerAuthUrl?uid=${encodeURIComponent(uid)}&redirect=${encodeURIComponent(redirect)}`,
-  ).then((b) => b.url);
-}
-
-/**
- * Push lines into the store cart. Fire-and-forget by nature: Kroger's Public API cannot
- * read a cart back, so `results` is the only account of what happened and a re-send
- * duplicates rather than reconciling.
- */
-export function sendToCart(input: {
-  uid: string;
-  locationId: string;
-  modality: Modality;
-  lines: SendLine[];
-}): Promise<SendResult> {
-  return post<SendResult>('/addToCart', input);
-}
+export const findStores: StoreApi['findStores'] = (...args) => impl.findStores(...args);
+export const searchProducts: StoreApi['searchProducts'] = (...args) => impl.searchProducts(...args);
+export const resolveItems: StoreApi['resolveItems'] = (...args) => impl.resolveItems(...args);
+export const rememberChoice: StoreApi['rememberChoice'] = (...args) => impl.rememberChoice(...args);
+export const krogerLinked: StoreApi['krogerLinked'] = (...args) => impl.krogerLinked(...args);
+export const krogerAuthUrl: StoreApi['krogerAuthUrl'] = (...args) => impl.krogerAuthUrl(...args);
+export const sendToCart: StoreApi['sendToCart'] = (...args) => impl.sendToCart(...args);

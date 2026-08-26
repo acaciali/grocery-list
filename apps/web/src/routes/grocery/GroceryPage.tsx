@@ -9,10 +9,11 @@ import {
 } from '@grocery/shared';
 import AddItemCombobox from './AddItemCombobox';
 import CartPanel from './CartPanel';
+import DemoBadge from './DemoBadge';
 import GroceryList from './GroceryList';
 import ItemSheet from './ItemSheet';
 import StorePicker from './StorePicker';
-import { rememberChoice } from './api';
+import { isDemoStore, rememberChoice } from './api';
 import { useConnectedStore } from './useStore';
 import { useMatchSync } from './useMatchSync';
 import {
@@ -157,6 +158,7 @@ export default function GroceryPage() {
               <>
                 <span aria-hidden="true">📍 </span>
                 <span className="font-semibold text-ink">{store.name}</span>
+                {isDemoStore && <DemoBadge />}
               </>
             ) : (
               <>

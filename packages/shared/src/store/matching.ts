@@ -1,4 +1,4 @@
-import type { StoreMatch, StoreProduct } from '@grocery/shared/types';
+import type { StoreMatch, StoreProduct } from '../types.js';
 
 /**
  * How confident we must be to pick a product without asking, plus how far ahead of the
@@ -105,6 +105,24 @@ export function toMatch(
     cartQuantity: 1,
     resolvedAt: null,
     sentAt: null,
+  };
+}
+
+/**
+ * The match for a product this user already picked for this exact text.
+ *
+ * Confidence is 1 and there are no candidates on purpose: this is not the resolver having
+ * an opinion, it is the user's own earlier decision being replayed. Stock is still checked,
+ * because "you chose this" and "the store has it today" are different facts.
+ */
+export function fromRemembered(product: StoreProduct, locationId: string): StoreMatch {
+  return {
+    status: product.stockLevel === 'TEMPORARILY_OUT_OF_STOCK' ? 'unavailable' : 'matched',
+    locationId,
+    product,
+    confidence: 1,
+    chosenBy: 'memory',
+    cartQuantity: 1,
   };
 }
 

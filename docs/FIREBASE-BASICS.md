@@ -117,10 +117,15 @@ data is deleted when the emulator stops.
 
 Cloud Functions are small pieces of server code that Firebase runs for you.
 They exist for the cases a browser must not handle: API secrets and CORS
-proxies. This project has a scaffold in `functions/` with one test endpoint.
-The main features do not need Functions, and deployment of Functions
-requires the paid Blaze plan. Everything else in this document works on the
-free plan.
+proxies. This project uses them in `functions/` for exactly two optional
+things — live Kroger store data and the shelf scanner — because both need a
+secret that would be public in browser JavaScript.
+
+Deploying any Function requires the paid Blaze plan, so nothing that matters
+depends on one: the grocery list, the pantry, and recipes all talk straight to
+Firestore, and the store surface falls back to a demo store that runs in the
+browser. See [SETUP.md](./SETUP.md) Step 8. Everything else in this document
+works on the free plan.
 
 ## Quotas and cost
 

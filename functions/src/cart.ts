@@ -3,7 +3,13 @@ import { onRequest, type Request } from 'firebase-functions/v2/https';
 import type { Response } from 'express';
 import { db, withDeadline } from './db.js';
 import { fail, requireParam, requirePost } from './http.js';
-import { validateLines, type CartRequestLine, type LineResult } from './cart-lines.js';
+import {
+  validateLines,
+  type CartLine,
+  type CartRequestLine,
+  type LineResult,
+  type Modality,
+} from '@grocery/shared/store';
 import {
   InvalidRedirectError,
   assertAllowedRedirect,
@@ -11,7 +17,6 @@ import {
   deriveCallbackUrl,
   encodeState,
 } from './oauth-state.js';
-import type { CartLine, Modality } from './stores/adapter.js';
 import { adapter, isMock } from './stores/select.js';
 import { clientId, exchangeAuthCode, krogerBaseUrl } from './stores/token.js';
 import {
