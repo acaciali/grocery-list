@@ -28,6 +28,7 @@ export default function ReviewGrid({
   candidates,
   location,
   stubbed,
+  model,
   saving,
   onChange,
   onLocationChange,
@@ -38,6 +39,8 @@ export default function ReviewGrid({
   candidates: Candidate[];
   location: StorageLocation;
   stubbed: boolean;
+  /** The pinned model that produced these, or null on the canned path. */
+  model: string | null;
   saving: boolean;
   onChange: (id: string, patch: Partial<Candidate>) => void;
   onLocationChange: (location: StorageLocation) => void;
@@ -57,11 +60,17 @@ export default function ReviewGrid({
           fix what isn't — nothing is saved until you tap add.
         </p>
 
-        {stubbed && (
+        {stubbed ? (
           // Say it out loud. A demo that silently shows canned data as if it were a live
           // model is the kind of thing that gets found out on stage.
           <p className="mt-2 rounded-card border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
-            Demo data — the shelf scanner isn't wired up to the AI yet.
+            Demo data — the scanner is set to canned data, so this isn't from your photo.
+          </p>
+        ) : (
+          // The flip side of the same honesty: name what actually read the photo, so a
+          // real result is distinguishable from a canned one at a glance.
+          <p className="mt-2 text-xs text-ink-soft">
+            Read from your photo{model ? ` by ${model}` : ''} — always worth a check.
           </p>
         )}
 
