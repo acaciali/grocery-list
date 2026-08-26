@@ -1,17 +1,36 @@
 @import "tailwindcss";
 
 /*
- * Shared theme -- the Phase 0 "agree on the Tailwind theme" starting point.
- * Tokens extracted from the original vanilla style.css rather than re-picked.
+ * Shared theme. Two layers:
+ *
+ * 1. The raw palette -- the five agreed colors, by name. Use these directly only
+ *    when a feature genuinely means "this exact color".
+ * 2. Semantic tokens -- what components actually reference (bg-bg, bg-accent,
+ *    text-ink, border-line, ...). New features use these, so a palette swap
+ *    stays a one-file change.
+ *
+ * The ink colors are derived warm neutrals for text, not palette members: every
+ * palette color is a pastel, and readable text needs the darkness they lack.
+ * Keep this file in sync with :root in the vanilla /style.css until that app is
+ * fully retired.
  */
 @theme {
-  --color-bg: #f5f3ee;
-  --color-surface: #ffffff;
-  --color-ink: #1d3557;
-  --color-ink-soft: #5a6b80;
-  --color-accent: #2a9d8f;
-  --color-warn: #e63946;
-  --color-line: #e3ddd1;
+  /* Raw palette */
+  --color-almond-silk: #f2ccc3;
+  --color-light-coral: #e78f8e;
+  --color-soft-blush: #ffe6e8;
+  --color-celadon: #acd8aa;
+  --color-cotton-candy: #f48498;
+
+  /* Semantic tokens */
+  --color-bg: #ffe6e8; /* Soft Blush -- page background */
+  --color-surface: #ffffff; /* cards and inputs, white for contrast on blush */
+  --color-ink: #4c2a30; /* primary text */
+  --color-ink-soft: #8a6a70; /* secondary text */
+  --color-accent: #f48498; /* Cotton Candy -- primary actions, active states */
+  --color-positive: #acd8aa; /* Celadon -- success, checked, "done" */
+  --color-warn: #e78f8e; /* Light Coral -- errors, destructive actions */
+  --color-line: #f2ccc3; /* Almond Silk -- borders and dividers */
   --radius-card: 14px;
 }
 
