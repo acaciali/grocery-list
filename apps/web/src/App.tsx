@@ -2,6 +2,7 @@ import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import GroceryPage from './routes/grocery/GroceryPage';
 import AddItemPage from './routes/inventory/AddItemPage';
 import InventoryPage from './routes/inventory/InventoryPage';
+import CookFromPantryPage from './routes/recipe/CookFromPantryPage';
 import RecipeDetailPage from './routes/recipe/RecipeDetailPage';
 import RecipeListPage from './routes/recipe/RecipeListPage';
 import RecipePage from './routes/recipe/RecipePage';
@@ -40,8 +41,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/grocery" replace />} />
           <Route path="/recipe" element={<RecipeListPage />} />
-          {/* Before the :id route, or "new" reads as a doc id. */}
+          {/* Before the :id route, or these read as doc ids. */}
           <Route path="/recipe/new" element={<RecipePage />} />
+          <Route path="/recipe/cook" element={<CookFromPantryPage />} />
           <Route path="/recipe/:id" element={<RecipeDetailPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/inventory/add" element={<AddItemPage />} />
