@@ -45,6 +45,6 @@ against a local throwaway database instead, start the emulators and set
 - `groceries/{id}` — one document per list item:
   `{ name, checked, createdAt }`. The list is shared by everyone who uses
   the same Firebase project.
-- `inventory/{uid}__{key}` — one document per pantry item, scoped to the
-  signed-in (anonymous) user. See the comments in `firestore.rules` for the
-  ID and query contract.
+- `inventory/{key}` — one document per pantry item, keyed by the normalized
+  item key, so adding something you already have updates it instead of
+  duplicating it. Shared by everyone on the project, like the grocery list.

@@ -14,6 +14,15 @@ export type Unit =
   // The original set is recipe-shaped; "2 gal milk" and "a dozen eggs" had no home.
   | 'gal' | 'each' | 'dozen' | 'bunch' | 'bag';
 
+/**
+ * The runtime companion to `Unit`, for populating unit dropdowns. Kept next to the type so
+ * the two cannot drift: the annotation makes an unlisted or misspelled unit a compile error.
+ */
+export const UNITS: readonly Unit[] = [
+  'g', 'kg', 'oz', 'lb', 'ml', 'l',
+  'tsp', 'tbsp', 'cup', 'clove', 'can', 'pkg',
+];
+
 export type Category =
   | 'produce' | 'dairy' | 'meat' | 'seafood' | 'bakery'
   | 'pantry' | 'canned' | 'frozen' | 'spices'
@@ -50,11 +59,6 @@ export type AddedVia = 'manual' | 'photo' | 'barcode' | 'grocery';
  */
 export interface InventoryItem {
   key: ItemKey;
-  /**
-   * Added by the Inventory team for per-user security rules (anonymous auth).
-   * Additive to the CLAUDE.md contract -- announced, nothing else changed.
-   */
-  userId: string;
   name: string;
   category: Category;
   location: StorageLocation;
@@ -70,10 +74,10 @@ export interface InventoryItem {
 
 /**
  * What a caller supplies to the inventory data layer.
- * `key` is derived from `name` when omitted; `userId` and `updatedAt` are set by the layer.
+ * `key` is derived from `name` when omitted; `updatedAt` is set by the layer.
  */
 export type InventoryItemInput =
-  Omit<InventoryItem, 'key' | 'userId' | 'updatedAt'> & { key?: ItemKey };
+  Omit<InventoryItem, 'key' | 'updatedAt'> & { key?: ItemKey };
 
 // --- Grocery ---------------------------------------------------------------------------
 
@@ -164,9 +168,21 @@ export interface Recipe {
   sourceUrl?: string;
   imageUrl?: string;
   servings?: number;
+  /**
+   * Durations in whole minutes. Stored as numbers rather than schema.org's ISO 8601
+   * strings ("PT1H15M") so they sort and add without re-parsing; the import path converts.
+   *
+   * `totalMinutes` is its own field, not `prep + cook` -- resting, marinating and chilling
+   * live in the gap, so deriving it would understate a lot of real recipes.
+   */
+  prepMinutes?: number;
+  cookMinutes?: number;
+  totalMinutes?: number;
   ingredients: Item[];
   steps: string[];
   tags: string[];
+  /** Free-form cook's notes: swaps, provenance, what to serve it with. */
+  notes?: string;
   createdBy: string;
   createdAt: Timestamp;
 }
@@ -177,4 +193,29 @@ export interface UserPrefs {
   storeLocationId?: string;
   storeName?: string;
   zip?: string;
+}
+
+// --- Shelf photo analysis (Inventory bonus) ----------------------------------------------
+
+/**
+ * One item the vision model believes it saw on a shelf. A SUGGESTION, not a fact --
+ * candidates go to the review grid, never straight to Firestore.
+ */
+export interface ShelfCandidate {
+  /** Already normalized server-side, so the photo path matches every other path. */
+  key: ItemKey;
+  /** Generic name for matching ("black beans"), brand kept separate. */
+  name: string;
+  brand?: string | null;
+  category: Category;
+  /** 0-1. The review grid pre-checks high-confidence items only. */
+  confidence: number;
+  note?: string | null;
+}
+
+/** Response shape of POST /analyzeShelf. */
+export interface AnalyzeShelfResponse {
+  items: ShelfCandidate[];
+  /** The pinned model that produced the candidates, for traceability. */
+  model: string;
 }
