@@ -13,9 +13,15 @@
  * PENDING SIGN-OFF per items.ts, so "you already have garlic" is a good guess, not a fact.
  * Showing the guess as a pre-ticked checkbox makes it correctable in one tap; acting on it
  * silently makes it a bug the cook only finds in the store.
+ *
+ * ⭐ Owning something is not the same as being able to cook with it. A jar of olive oil
+ * that expired in March satisfies a presence check and fails the recipe, so pantry items
+ * whose expiry is urgent are pulled into a review section at the TOP and labelled. They
+ * stay unticked -- you do own them, and the app does not get to decide the oil is bad --
+ * but they are the first thing you see rather than something buried under "already have".
  */
 import { useEffect, useState } from 'react';
-import { hasMany, type Item, type ItemKey } from '@grocery/shared';
+import { listItems, type InventoryItem, type Item, type ItemKey } from '@grocery/shared';
 import {
   addRecipeIngredients,
   readGroceryList,
@@ -23,47 +29,12 @@ import {
   type AddSummary,
 } from '../grocery/addFromRecipe';
 import { formatMeasure } from './quantity';
-
-/** One ingredient as the sheet holds it. */
-interface Line {
-  /** Index-based: two lines can share a key ("2 cups milk", "1 cup milk"). */
-  id: number;
-  item: Item;
-  /** I2: this key is already in the pantry, so it starts unticked. */
-  inPantry: boolean;
-  /** Already on the grocery list -- adding will bump that row, not make a second one. */
-  onList: boolean;
-  checked: boolean;
-}
+import { buildLines, groupLines, needsReview, type Line } from './reviewLines';
 
 type Load =
   | { status: 'loading' }
   | { status: 'ready'; lines: Line[]; pantryChecked: boolean }
   | { status: 'error' };
-
-/**
- * Build the sheet's lines from what the pantry and the list say.
- *
- * `pantryKeys` is null when the pantry could not be read. Everything then starts ticked:
- * failing to check is not evidence that you own nothing, and the banner says as much.
- */
-function buildLines(
-  ingredients: Item[],
-  pantryKeys: Set<string> | null,
-  listKeys: Set<string>,
-): Line[] {
-  return ingredients.map((item, index) => {
-    const key = safeKey(item.name);
-    const inPantry = pantryKeys !== null && key !== undefined && pantryKeys.has(key);
-    return {
-      id: index,
-      item,
-      inPantry,
-      onList: key !== undefined && listKeys.has(key),
-      checked: !inPantry,
-    };
-  });
-}
 
 export default function AddToGrocerySheet({
   recipeId,
@@ -86,13 +57,10 @@ export default function AddToGrocerySheet({
     let cancelled = false;
 
     void (async () => {
-      const keys = ingredients
-        .map((item) => safeKey(item.name))
-        .filter((key): key is ItemKey => key !== undefined);
-
-      // The list read is what the sheet labels rows with; the merge re-reads at write time
-      // so a list edited in another tab meanwhile still merges correctly.
-      const [pantry, list] = await Promise.allSettled([hasMany(keys), readGroceryList()]);
+      // listItems() rather than hasMany(): the sheet needs each pantry row's expiry, not
+      // just whether the key exists. It is also one collection read instead of one doc
+      // read per ingredient.
+      const [pantry, list] = await Promise.allSettled([listItems(), readGroceryList()]);
       if (cancelled) return;
 
       if (list.status === 'rejected') {
@@ -103,13 +71,9 @@ export default function AddToGrocerySheet({
 
       // A failed pantry read degrades to "couldn't check" rather than taking down the
       // whole sheet -- adding ingredients is still worth doing without I2.
-      let pantryKeys: Set<string> | null = null;
+      let owned: Map<string, InventoryItem> | null = null;
       if (pantry.status === 'fulfilled') {
-        pantryKeys = new Set(
-          Object.entries(pantry.value)
-            .filter(([, owned]) => owned)
-            .map(([key]) => key),
-        );
+        owned = new Map(pantry.value.map((row) => [row.key, row]));
       } else {
         console.error(pantry.reason);
       }
@@ -123,8 +87,8 @@ export default function AddToGrocerySheet({
 
       setLoad({
         status: 'ready',
-        lines: buildLines(ingredients, pantryKeys, listKeys),
-        pantryChecked: pantryKeys !== null,
+        lines: buildLines(ingredients, owned, listKeys),
+        pantryChecked: owned !== null,
       });
     })();
 
@@ -172,8 +136,7 @@ export default function AddToGrocerySheet({
   }
 
   const lines = load.status === 'ready' ? load.lines : [];
-  const missing = lines.filter((line) => !line.inPantry);
-  const owned = lines.filter((line) => line.inPantry);
+  const { review, missing, owned } = groupLines(lines);
   const selected = lines.filter((line) => line.checked).length;
 
   return (
@@ -219,8 +182,8 @@ export default function AddToGrocerySheet({
                 // Say it plainly. A sheet that silently skipped the pantry check but still
                 // looks like it ran one is how someone re-buys a jar of cumin.
                 <p className="mb-3 rounded-card border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
-                  Couldn’t check your pantry, so nothing is pre-skipped — everything is
-                  ticked.
+                  Couldn’t check your pantry, so nothing is pre-skipped or checked for
+                  expiry — everything is ticked.
                 </p>
               )}
 
@@ -245,6 +208,24 @@ export default function AddToGrocerySheet({
                   </button>
                 </div>
               </div>
+
+              {/* Top of the sheet: you own these, but not in a state you can cook with. */}
+              {review.length > 0 && (
+                <section className="mb-5">
+                  <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-warn">
+                    Worth a look before you shop
+                  </h3>
+                  <p className="mb-1 px-1 text-xs text-ink-soft">
+                    In your pantry, but past or near its date. Left unticked — tick any you
+                    want to replace.
+                  </p>
+                  <ul className="space-y-2">
+                    {review.map((line) => (
+                      <IngredientRow key={line.id} line={line} onToggle={toggle} />
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               <ul className="space-y-2">
                 {missing.map((line) => (
@@ -304,12 +285,13 @@ function IngredientRow({
   onToggle: (id: number, checked: boolean) => void;
 }) {
   const measure = formatMeasure(line.item);
+  const flagged = needsReview(line);
 
   return (
     <li
       className={`rounded-card border bg-surface shadow-sm transition-colors ${
-        line.checked ? 'border-accent' : 'border-line'
-      } ${line.inPantry ? 'opacity-70' : ''}`}
+        line.checked ? 'border-accent' : flagged ? 'border-warn/50' : 'border-line'
+      } ${line.inPantry && !flagged ? 'opacity-70' : ''}`}
     >
       <label className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2">
         <input
@@ -323,10 +305,23 @@ function IngredientRow({
         )}
         <span className="min-w-0 flex-1">
           <span className="block truncate">{line.item.name}</span>
+
+          {flagged && line.expiry && (
+            <span className="block text-xs font-semibold text-warn">
+              {line.expiry.label} — you may want to add it.
+            </span>
+          )}
+
           {(line.inPantry || line.onList) && (
             <span className="block text-xs text-ink-soft">
-              {line.inPantry && <span className="font-semibold text-accent">Already have this.</span>}
-              {line.inPantry && line.onList && ' '}
+              {line.inPantry && !flagged && (
+                <>
+                  <span className="font-semibold text-accent">Already have this.</span>
+                  {/* A non-urgent date is still context worth having while you decide. */}
+                  {line.expiry && <span> {line.expiry.label}.</span>}
+                </>
+              )}
+              {line.inPantry && !flagged && line.onList && ' '}
               {line.onList && <span>On your list — this adds to it.</span>}
             </span>
           )}
