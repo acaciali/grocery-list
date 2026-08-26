@@ -53,7 +53,7 @@ export default function ReviewGrid({
   const known = candidates.filter((c) => c.alreadyHave);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         <p className="text-sm text-ink-soft">
           Found {candidates.length} item{candidates.length === 1 ? '' : 's'}. Check what's right,
@@ -105,8 +105,9 @@ export default function ReviewGrid({
         )}
       </div>
 
-      {/* Pinned so the primary action stays reachable on a phone with fifteen cards. */}
-      <div className="border-t border-line bg-surface px-4 py-3">
+      {/* Pinned so the primary action stays reachable on a phone with fifteen cards.
+          The safe-area pad keeps the add button clear of the home indicator. */}
+      <div className="border-t border-line bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={onSave}
