@@ -9,6 +9,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getRecipe, type Recipe, type RecipeRow } from '@grocery/shared';
 import type { AddSummary } from '../grocery/addFromRecipe';
 import AddToGrocerySheet from './AddToGrocerySheet';
+import { summarizeAdds } from './cookFromPantry';
 import { formatMeasure } from './quantity';
 
 type Load =
@@ -151,17 +152,6 @@ function RecipeBody({
   );
 }
 
-/**
- * "Added 6, topped up 2" — what actually happened, rather than a flat "Added to list".
- * A merge is the surprising outcome, so it gets named.
- */
-function summarize(summary: AddSummary): string {
-  const parts: string[] = [];
-  if (summary.added > 0) parts.push(`Added ${summary.added}`);
-  if (summary.merged > 0) parts.push(`topped up ${summary.merged} already on your list`);
-  return parts.length === 0 ? 'Nothing to add' : `${parts.join(', ')}.`;
-}
-
 export default function RecipeDetailPage() {
   const { id } = useParams<'id'>();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
@@ -173,7 +163,9 @@ export default function RecipeDetailPage() {
 
   function finish(summary: AddSummary) {
     setSheetOpen(false);
-    setToast(summarize(summary));
+    // One summary, but the same sentence the pantry screen builds from several -- the
+    // wording lives in one place so the two confirmations cannot drift apart.
+    setToast(summarizeAdds([summary]));
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }
