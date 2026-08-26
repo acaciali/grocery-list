@@ -6,15 +6,14 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db, type Recipe } from '@grocery/shared';
+import { getRecipe, type Recipe, type RecipeRow } from '@grocery/shared';
 import type { AddSummary } from '../grocery/addFromRecipe';
 import AddToGrocerySheet from './AddToGrocerySheet';
 import { formatMeasure } from './quantity';
 
 type Load =
   | { status: 'loading' }
-  | { status: 'ready'; recipe: Recipe }
+  | { status: 'ready'; recipe: RecipeRow }
   | { status: 'missing' }
   | { status: 'error' };
 
@@ -191,13 +190,12 @@ export default function RecipeDetailPage() {
 
     void (async () => {
       try {
-        const snap = await getDoc(doc(db, 'recipes', id));
+        // getRecipe, not a raw getDoc + cast: the same adapter the cookbook list reads
+        // through, so a recipe written by the un-ported vanilla form opens with a title
+        // and with keyed ingredients the grocery sheet can actually match on.
+        const recipe = await getRecipe(id);
         if (cancelled) return;
-        setLoad(
-          snap.exists()
-            ? { status: 'ready', recipe: snap.data() as Recipe }
-            : { status: 'missing' },
-        );
+        setLoad(recipe ? { status: 'ready', recipe } : { status: 'missing' });
       } catch (err) {
         console.error(err);
         if (cancelled) return;
