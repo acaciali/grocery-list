@@ -9,6 +9,10 @@ host such as GitHub Pages is enough.
 create a free Firebase project, paste its config into one file, and deploy.
 Your data stays in your own project.
 
+**New to Firebase?** [docs/FIREBASE-BASICS.md](docs/FIREBASE-BASICS.md)
+explains the concepts this project uses: projects, Firestore, live
+updates, security rules, and quotas.
+
 ## Repository layout
 
 - `apps/web/` — the React app. Routes live in `apps/web/src/routes/`
