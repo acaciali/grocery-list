@@ -60,21 +60,17 @@ export default function ReviewGrid({
           fix what isn't — nothing is saved until you tap add.
         </p>
 
-        {stubbed ? (
-          // Say it out loud. A demo that silently shows canned data as if it were a live
-          // model is the kind of thing that gets found out on stage.
-          <p className="mt-2 rounded-card border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
-            Demo data — the scanner is set to canned data, so this isn't from your photo.
-          </p>
-        ) : (
-          // The flip side of the same honesty: name what actually read the photo, so a
-          // real result is distinguishable from a canned one at a glance.
+        {/* A demo run is already disclosed on the intro screen, in amber, BEFORE a photo is
+            spent -- repeating it here only cost a banner's worth of scroll. The live label
+            stays: naming what read the photo is what keeps a real result distinguishable
+            from a canned one. If the intro banner ever goes, this has to come back. */}
+        {!stubbed && (
           <p className="mt-2 text-xs text-ink-soft">
             Read from your photo{model ? ` by ${model}` : ''} — always worth a check.
           </p>
         )}
 
-        <label className="mt-3 flex items-center gap-2 text-sm">
+        <label className="mt-2 flex items-center gap-2 text-sm">
           <span className="font-semibold">Putting these in</span>
           <select
             value={location}
@@ -89,7 +85,7 @@ export default function ReviewGrid({
           </select>
         </label>
 
-        <ul className="mt-3 space-y-2">
+        <ul className="mt-2 space-y-1.5">
           {newOnes.map((c) => (
             <CandidateCard key={c.id} candidate={c} onChange={onChange} />
           ))}
@@ -97,10 +93,10 @@ export default function ReviewGrid({
 
         {known.length > 0 && (
           <>
-            <p className="mt-5 px-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+            <p className="mt-4 px-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">
               Already in your pantry
             </p>
-            <ul className="mt-1 space-y-2">
+            <ul className="mt-1 space-y-1.5">
               {known.map((c) => (
                 <CandidateCard key={c.id} candidate={c} onChange={onChange} />
               ))}
@@ -153,11 +149,11 @@ function CandidateCard({
 
   return (
     <li
-      className={`rounded-card border bg-surface p-3 shadow-sm transition-colors ${
+      className={`rounded-card border bg-surface p-2.5 shadow-sm transition-colors ${
         candidate.checked ? 'border-accent' : 'border-line'
       } ${candidate.alreadyHave ? 'opacity-70' : ''}`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2.5">
         <input
           type="checkbox"
           checked={candidate.checked}
@@ -166,19 +162,23 @@ function CandidateCard({
           className="mt-3 size-5 shrink-0 accent-[var(--color-accent)]"
         />
         <div className="min-w-0 flex-1">
-          <input
-            value={candidate.name}
-            onChange={(e) => onChange(candidate.id, { name: e.target.value })}
-            aria-label="Detected item name"
-            className="min-h-11 w-full rounded-card border border-line bg-surface px-3 text-base outline-none focus:border-accent"
-          />
+          {/* One row, not two. Stacking the category under the name cost ~48px a card,
+              which is most of the scrolling on a ten-item shelf. Every control here keeps
+              its 44px tap target -- the space comes from the layout, not from shrinking
+              anything you have to hit with a thumb. */}
+          <div className="flex items-center gap-2">
+            <input
+              value={candidate.name}
+              onChange={(e) => onChange(candidate.id, { name: e.target.value })}
+              aria-label="Detected item name"
+              className="min-h-11 min-w-0 flex-1 rounded-card border border-line bg-surface px-3 text-base outline-none focus:border-accent"
+            />
 
-          <div className="mt-2 flex items-center gap-2">
             <select
               value={candidate.category}
               onChange={(e) => onChange(candidate.id, { category: e.target.value as Category })}
               aria-label="Category"
-              className="min-h-10 flex-1 rounded-card border border-line bg-surface px-2 text-sm outline-none focus:border-accent"
+              className="min-h-11 w-28 shrink-0 rounded-card border border-line bg-surface px-2 text-sm outline-none focus:border-accent"
             >
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>
@@ -200,7 +200,7 @@ function CandidateCard({
           {/* Brand is kept out of `name` on purpose: "Jif" must not end up in the key, or
               this stops matching a recipe's "peanut butter". */}
           {(candidate.brand || candidate.note || candidate.alreadyHave) && (
-            <p className="mt-1.5 text-xs text-ink-soft">
+            <p className="mt-1 text-xs text-ink-soft">
               {candidate.alreadyHave && (
                 <span className="font-semibold text-accent">Already have this. </span>
               )}
