@@ -1,9 +1,5 @@
-import { getApps, initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 import type { StoreProduct } from '@grocery/shared/types';
-
-if (getApps().length === 0) initializeApp();
-const db = getFirestore();
+import { db, withDeadline } from '../db.js';
 
 /**
  * Cache keys are the QUERY TEXT, not the shared ItemKey.
@@ -37,7 +33,10 @@ export async function readSearchCache(
   term: string,
 ): Promise<StoreProduct[] | null> {
   try {
-    const snap = await db.collection('storeProducts').doc(docId(locationId, term)).get();
+    const snap = await withDeadline(
+      db().collection('storeProducts').doc(docId(locationId, term)).get(),
+      'search cache read',
+    );
     const data = snap.data() as CachedSearch | undefined;
     if (!data) return null;
     if (Date.now() - data.cachedAtMs > TTL_MS) return null;
@@ -55,10 +54,13 @@ export async function writeSearchCache(
   products: StoreProduct[],
 ): Promise<void> {
   try {
-    await db
-      .collection('storeProducts')
-      .doc(docId(locationId, term))
-      .set({ products, cachedAtMs: Date.now(), locationId, term: queryKey(term) });
+    await withDeadline(
+      db()
+        .collection('storeProducts')
+        .doc(docId(locationId, term))
+        .set({ products, cachedAtMs: Date.now(), locationId, term: queryKey(term) }),
+      'search cache write',
+    );
   } catch (err) {
     console.error('search cache write failed', err);
   }
@@ -70,10 +72,13 @@ export async function readProductPref(
   term: string,
 ): Promise<StoreProduct | null> {
   try {
-    const snap = await db
-      .collection('users').doc(uid)
-      .collection('productPrefs').doc(queryKey(term).replace(/\//g, '_'))
-      .get();
+    const snap = await withDeadline(
+      db()
+        .collection('users').doc(uid)
+        .collection('productPrefs').doc(queryKey(term).replace(/\//g, '_'))
+        .get(),
+      'product pref read',
+    );
     return (snap.data()?.product as StoreProduct | undefined) ?? null;
   } catch (err) {
     console.error('product pref read failed', err);
@@ -81,13 +86,20 @@ export async function readProductPref(
   }
 }
 
+/**
+ * Unlike the reads, this one throws. rememberChoice() is a user action with a visible
+ * result -- silently dropping it teaches the user their correction doesn't stick.
+ */
 export async function writeProductPref(
   uid: string,
   term: string,
   product: StoreProduct,
 ): Promise<void> {
-  await db
-    .collection('users').doc(uid)
-    .collection('productPrefs').doc(queryKey(term).replace(/\//g, '_'))
-    .set({ product, term: queryKey(term), updatedAtMs: Date.now() });
+  await withDeadline(
+    db()
+      .collection('users').doc(uid)
+      .collection('productPrefs').doc(queryKey(term).replace(/\//g, '_'))
+      .set({ product, term: queryKey(term), updatedAtMs: Date.now() }),
+    'product pref write',
+  );
 }
