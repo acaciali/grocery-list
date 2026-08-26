@@ -1,5 +1,6 @@
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import GroceryPage from './routes/grocery/GroceryPage';
+import AddItemPage from './routes/inventory/AddItemPage';
 import InventoryPage from './routes/inventory/InventoryPage';
 import RecipePage from './routes/recipe/RecipePage';
 
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/grocery" replace />} />
           <Route path="/recipe" element={<RecipePage />} />
           <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/inventory/add" element={<AddItemPage />} />
           <Route path="/grocery" element={<GroceryPage />} />
         </Routes>
       </main>

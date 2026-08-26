@@ -1,20 +1,21 @@
 /**
  * 🥫 Inventory. Presence-based: we track WHETHER you have something, not how much.
  *
- * Manual logging is the MVP and the photo flow is the bonus, so the add form sits at the
- * top where it's reachable and the scan button sits beside it rather than above it.
+ * This page is the list and nothing else -- search, filters, rows. Everything that adds
+ * food lives on /inventory/add (AddItemPage), reached by the button in the corner, so the
+ * list isn't permanently pushed down by a form.
  *
  * Reads and writes go through the shared data layer (packages/shared/src/inventory.ts),
  * which is also where Grocery gets has() for I2 and Recipe gets getAllKeys() for I5.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { InventoryRow, StorageLocation } from '@grocery/shared';
-import AddItemForm from './AddItemForm';
 import InventoryList from './InventoryList';
-import ShelfCapture from './ShelfCapture';
 import { LOCATIONS, LOCATION_META } from './constants';
 import { pantry } from './pantryStore';
 import { useInventory } from './useInventory';
+import { ToastBar, useToast } from './useToast';
 
 type LocationFilter = StorageLocation | 'all';
 
@@ -22,17 +23,20 @@ export default function InventoryPage() {
   const { rows, uid, loading, error } = useInventory();
   const [search, setSearch] = useState('');
   const [locationFilter, setLocationFilter] = useState<LocationFilter>('all');
-  const [scanning, setScanning] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; kind: 'info' | 'error' } | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const { toast, showToast } = useToast();
 
-  useEffect(() => () => clearTimeout(toastTimer.current), []);
-
-  function showToast(msg: string, kind: 'info' | 'error' = 'info') {
-    setToast({ msg, kind });
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2200);
-  }
+  // A save on the add page navigates here with its message in tow. Replace the entry
+  // afterwards so a refresh or a Back doesn't replay "Added Milk".
+  const location = useLocation();
+  const navigate = useNavigate();
+  const handoff = (location.state as { toast?: string } | null)?.toast;
+  useEffect(() => {
+    if (!handoff) return;
+    showToast(handoff);
+    navigate('/inventory', { replace: true, state: null });
+    // showToast/navigate are stable enough here; the message is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoff]);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -44,6 +48,15 @@ export default function InventoryPage() {
       return row.name.toLowerCase().includes(needle) || row.key.includes(needle);
     });
   }, [rows, search, locationFilter]);
+
+  const addButton = (
+    <Link
+      to="/inventory/add"
+      className="inline-flex min-h-11 items-center rounded-card bg-accent px-4 text-sm font-semibold text-white active:opacity-80"
+    >
+      + Add new item
+    </Link>
+  );
 
   if (loading) {
     return (
@@ -67,23 +80,16 @@ export default function InventoryPage() {
 
   return (
     <section>
-      <AddItemForm
-        uid={uid}
-        rows={rows}
-        onAdded={showToast}
-        onError={(m) => showToast(m, 'error')}
-      />
-
-      <button
-        type="button"
-        onClick={() => setScanning(true)}
-        className="mt-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-card border-2 border-dashed border-accent/40 bg-accent/5 font-semibold text-accent"
-      >
-        📸 Scan a shelf
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-bold">
+          Your pantry{' '}
+          {rows.length > 0 && <span className="font-normal text-ink-soft">({rows.length})</span>}
+        </h2>
+        {addButton}
+      </div>
 
       {rows.length > 0 && (
-        <div className="mt-4 space-y-2">
+        <div className="mt-3 space-y-2">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -118,27 +124,28 @@ export default function InventoryPage() {
 
       <div className="mt-4">
         {rows.length === 0 ? (
-          // Empty state points at both ways in, because "scan a shelf" is the fast path
-          // for a real pantry and typing is the fast path for one item.
+          // Empty state points at the add page, which is now the only way in.
           <div className="rounded-card border border-line bg-surface p-8 text-center shadow-sm">
             <p className="text-4xl" aria-hidden="true">
               🥫
             </p>
             <h2 className="mt-3 font-bold">Your pantry is empty</h2>
             <p className="mt-2 text-sm text-ink-soft">
-              Type something in above, tap a staple, or photograph a shelf and confirm what's
-              on it. Once there's food in here, your grocery list stops suggesting things you
-              already own.
+              Add an item, tap a staple, or photograph a shelf and confirm what's on it. Once
+              there's food in here, your grocery list stops suggesting things you already own.
             </p>
-            {pantry.isLocal && (
-              <button
-                type="button"
-                onClick={() => void pantry.loadSample(uid)}
-                className="mt-4 min-h-11 rounded-card border border-line px-4 text-sm font-semibold text-ink-soft hover:text-accent"
-              >
-                Load sample pantry
-              </button>
-            )}
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {addButton}
+              {pantry.isLocal && (
+                <button
+                  type="button"
+                  onClick={() => void pantry.loadSample(uid)}
+                  className="min-h-11 rounded-card border border-line px-4 text-sm font-semibold text-ink-soft hover:text-accent"
+                >
+                  Load sample pantry
+                </button>
+              )}
+            </div>
           </div>
         ) : visible.length === 0 ? (
           <p className="rounded-card border border-line bg-surface p-6 text-center text-sm text-ink-soft">
@@ -171,26 +178,7 @@ export default function InventoryPage() {
         </p>
       )}
 
-      {scanning && (
-        <ShelfCapture
-          uid={uid}
-          rows={rows}
-          onClose={() => setScanning(false)}
-          onDone={showToast}
-          onError={(m) => showToast(m, 'error')}
-        />
-      )}
-
-      {toast && (
-        <p
-          role="status"
-          className={`fixed inset-x-4 bottom-4 z-[60] mx-auto max-w-md rounded-card px-4 py-3 text-center text-sm font-semibold text-white shadow-lg ${
-            toast.kind === 'error' ? 'bg-warn' : 'bg-ink'
-          }`}
-        >
-          {toast.msg}
-        </p>
-      )}
+      <ToastBar toast={toast} />
     </section>
   );
 }
