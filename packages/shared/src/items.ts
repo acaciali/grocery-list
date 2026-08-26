@@ -58,6 +58,17 @@ const DESCRIPTORS = new Set([
   'optional', 'divided', 'packed', 'softened', 'melted',
 ]);
 
+/**
+ * Plurals ending in -ies whose singular ends in -ie, not -y.
+ * "berries" -> "berry" is the general rule; "cookies" -> "cooky" is not a word.
+ * English cannot tell these apart without a dictionary, so the -ie words we actually
+ * meet in a kitchen are listed instead.
+ */
+const IE_PLURALS = new Set([
+  'cookies', 'brownies', 'twinkies', 'smoothies', 'veggies',
+  'hoagies', 'pierogies', 'blondies', 'zeppolies',
+]);
+
 /** Words whose trailing -s or -es is part of the word, not a plural. */
 const INVARIANT = new Set([
   'molasses', 'hummus', 'couscous', 'asparagus', 'watercress', 'swiss',
@@ -75,6 +86,7 @@ function singularize(token: string): string {
   if (INVARIANT.has(token)) return token;
   if (token.length <= 3) return token;
 
+  if (IE_PLURALS.has(token)) return token.slice(0, -1);
   if (token.endsWith('ies')) return `${token.slice(0, -3)}y`;
   if (token.endsWith('oes')) return token.slice(0, -2);
 

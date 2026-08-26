@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeKey } from '@grocery/shared/items';
 import type { Category } from '@grocery/shared/types';
 import {
+  DEMO_CANDIDATES,
   MAX_IMAGE_B64_LENGTH,
   toShelfCandidates,
   validateShelfRequest,
@@ -95,5 +96,32 @@ describe('toShelfCandidates -- the generalized-identity contract', () => {
 
   it('returns an empty list for an empty shelf, not an error', () => {
     expect(toShelfCandidates([])).toEqual([]);
+  });
+});
+
+describe('DEMO_CANDIDATES fixture', () => {
+  const candidates = toShelfCandidates([...DEMO_CANDIDATES]);
+
+  it('every demo item survives normalization -- none silently dropped', () => {
+    expect(candidates).toHaveLength(DEMO_CANDIDATES.length);
+  });
+
+  it('produces sane keys, including the -ie plurals', () => {
+    const keys = candidates.map((c) => c.key);
+    expect(keys).toContain('cookie');   // not "cooky"
+    expect(keys).toContain('twinkie');  // not "twinky"
+    expect(keys).toContain('pretzel');
+    expect(keys).toContain('gummy-bear');
+  });
+
+  it('keeps brands out of the identity key', () => {
+    const cookies = candidates.find((c) => c.key === 'cookie');
+    expect(cookies?.brand).toBe('Famous Amos');
+  });
+
+  it('spans the confidence range so the review grid pre-check logic is exercised', () => {
+    const confidences = candidates.map((c) => c.confidence);
+    expect(Math.max(...confidences)).toBeGreaterThan(0.9);
+    expect(Math.min(...confidences)).toBeLessThan(0.5);
   });
 });
