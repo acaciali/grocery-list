@@ -253,13 +253,6 @@ export default function ShelfCapture({
             </p>
           </div>
 
-          {!isLive && (
-            // Better to know before spending a photo than to find out on the review grid.
-            <p className="mt-3 rounded-card border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
-              Demo mode — the scanner is set to canned data, so your photo won't be read.
-            </p>
-          )}
-
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}

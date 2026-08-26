@@ -37,3 +37,26 @@
 body {
   @apply bg-bg text-ink antialiased;
 }
+
+/*
+ * Cursors for anything clickable. Browsers only hand out the pointer cursor for
+ * links by default -- buttons, selects and checkbox labels all get the plain
+ * arrow -- so every app on the web adds this back. One global rule instead of a
+ * cursor-pointer utility sprinkled on each new button, which is the version we
+ * keep forgetting.
+ */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+a[href],
+select:not(:disabled),
+summary,
+label:has(input[type='checkbox']),
+label:has(input[type='radio']) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
