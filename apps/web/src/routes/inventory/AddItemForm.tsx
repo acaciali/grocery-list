@@ -2,6 +2,10 @@
  * Manual logging. This is the MVP, so the whole design goal is speed: type a name, hit
  * enter, keep going. Category and location have sane defaults and quantity is genuinely
  * optional, because inventory is presence-based.
+ *
+ * Lives on its own page (routes/inventory/AddItemPage), so this renders as a full form
+ * with a Save button rather than a one-line bar. `onSaved` is what sends you back to the
+ * list; staples deliberately don't fire it, so you can tap several in a row.
  */
 import { type FormEvent, useMemo, useState } from 'react';
 import {
@@ -23,11 +27,14 @@ export default function AddItemForm({
   rows,
   onError,
   onAdded,
+  onSaved,
 }: {
   uid: string;
   rows: InventoryRow[];
   onError: (msg: string) => void;
   onAdded: (msg: string) => void;
+  /** Called after a typed item saves -- the page uses it to return to the pantry list. */
+  onSaved: () => void;
 }) {
   const [name, setName] = useState('');
   const [category, setCategory] = useState<Category>('pantry');
@@ -88,6 +95,7 @@ export default function AddItemForm({
         expiresAt: fromDateInputValue(expires),
       });
       onAdded(existing ? `Updated ${trimmed}` : `Added ${trimmed}`);
+      onSaved();
     } catch (err) {
       console.error(err);
       setName(trimmed); // Hand the text back so the typing isn't lost.
@@ -111,29 +119,21 @@ export default function AddItemForm({
 
   return (
     <form onSubmit={submit} className="rounded-card border border-line bg-surface p-3 shadow-sm">
-      <div className="flex gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Add to your pantry…"
-          aria-label="Item name"
-          list="inventory-name-suggestions"
-          autoComplete="off"
-          className={`${field} flex-1`}
-        />
-        <datalist id="inventory-name-suggestions">
-          {suggestions.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <button
-          type="submit"
-          disabled={!pendingKey || busy}
-          className="min-h-12 rounded-card bg-accent px-5 font-semibold text-white active:opacity-80 disabled:opacity-40"
-        >
-          Add
-        </button>
-      </div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="What are you adding?"
+        aria-label="Item name"
+        list="inventory-name-suggestions"
+        autoComplete="off"
+        autoFocus
+        className={`${field} w-full`}
+      />
+      <datalist id="inventory-name-suggestions">
+        {suggestions.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
 
       {existing && (
         <p className="mt-2 text-xs text-ink-soft">
@@ -217,6 +217,15 @@ export default function AddItemForm({
         </div>
       )}
 
+      <button
+        type="submit"
+        disabled={!pendingKey || busy}
+        className="mt-3 min-h-12 w-full rounded-card bg-accent font-semibold text-white active:opacity-80 disabled:opacity-40"
+      >
+        {existing ? 'Save changes' : 'Save to pantry'}
+      </button>
+
+      {/* Staples save on tap and stay put, so three taps add three things. */}
       <div className="mt-3 border-t border-line pt-3">
         <p className="text-xs font-semibold text-ink-soft">One-tap staples</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
