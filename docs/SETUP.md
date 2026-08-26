@@ -112,6 +112,41 @@ Anyone with this URL can read and write your grocery list. That is the
 intended trade-off of this simple setup: convenient for a small trusted
 group, not suitable for sensitive data.
 
+## Step 8 (optional): send your list to a Kroger cart
+
+The grocery list can push its matched items into a real Kroger cart. Nothing
+below is needed for the list, prices, or product search in mock mode — only
+for writing to a live cart.
+
+Cart writes need *your* permission on Kroger's own site, which is a different
+grant from the one behind product search. Setting it up means:
+
+1. Register an app at the [Kroger developer portal](https://developer.kroger.com)
+   and request the `cart.basic:write` scope.
+2. Register a redirect URI there. It must match, exactly, the value you put in
+   `functions/.env` as `KROGER_REDIRECT_URI`:
+   - local: `http://127.0.0.1:5001/YOUR-PROJECT-ID/us-central1/krogerCallback`
+   - deployed: `https://us-central1-YOUR-PROJECT-ID.cloudfunctions.net/krogerCallback`
+3. Copy `functions/.env.example` to `functions/.env` and fill in
+   `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` and `KROGER_REDIRECT_URI`.
+4. Set `APP_ALLOWED_ORIGINS` to the origins the app is served from, comma
+   separated, for example `https://YOUR-USERNAME.github.io`. This is the
+   allowlist for where Kroger's callback may send the browser back to, so an
+   unlisted origin fails the link rather than redirecting somewhere unexpected.
+   It defaults to the local dev server, so local linking needs no entry.
+
+Then open the grocery list, connect a store, and use **Link your Kroger
+account** in the send panel.
+
+Two things about this are worth knowing before you rely on it. Kroger's public
+API can add to a cart but never read it back or remove from it, so the app
+reports what it sent and when, and cannot show you what is in your cart —
+check the Kroger app for that. And sending the same item twice adds it twice;
+items already sent are excluded from the next send for exactly that reason.
+
+Without credentials, everything above still runs against a built-in mock store,
+including the full linking round trip. That is the default on a fresh clone.
+
 ## Costs
 
 Everything above runs on the free Firebase Spark plan. Its Firestore

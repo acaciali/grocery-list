@@ -74,8 +74,10 @@ export default function GroceryList({ items, hasStore, onToggle, onDelete, onOpe
 
       {checked.length > 0 && (
         <section>
+          {/* Not "in the cart" any more: there is a real store cart now, and one phrase
+              cannot mean both "already in my trolley" and "sent to Kroger". */}
           <h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
-            In the cart
+            Got these
           </h2>
           <ul className="space-y-2">
             {checked.map((row) => (

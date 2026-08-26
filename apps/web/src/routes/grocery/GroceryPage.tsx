@@ -8,6 +8,7 @@ import {
   type Unit,
 } from '@grocery/shared';
 import AddItemCombobox from './AddItemCombobox';
+import CartPanel from './CartPanel';
 import GroceryList from './GroceryList';
 import ItemSheet from './ItemSheet';
 import StorePicker from './StorePicker';
@@ -126,8 +127,11 @@ export default function GroceryPage() {
       if (row.checked) continue;
       const p = row.match?.product;
       const price = p?.promoPrice ?? p?.price;
-      if (row.match?.status === 'matched' && price != null) {
-        total += price * (row.match.cartQuantity ?? 1);
+      // 'sent' counts too: the item is still on the list and still costs money. Dropping it
+      // here would make the estimate fall every time you sent something to the cart.
+      const priceable = row.match?.status === 'matched' || row.match?.status === 'sent';
+      if (priceable && price != null) {
+        total += price * (row.match?.cartQuantity ?? 1);
         priced += 1;
       } else {
         unpriced += 1;
@@ -204,6 +208,8 @@ export default function GroceryPage() {
           onOpen={(row) => setSheetId(row.id)}
         />
       </div>
+
+      <CartPanel items={items} locationId={locationId} storeName={store?.name ?? null} uid={uid} />
 
       {/* Background resolution is otherwise completely invisible without sight. */}
       <p role="status" aria-live="polite" className="sr-only">

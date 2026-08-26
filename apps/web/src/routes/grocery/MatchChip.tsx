@@ -44,7 +44,11 @@ function describe(match: StoreMatch | null | undefined, hasStore: boolean): Disp
     case 'not_sold':
       return { label: 'Not sold here', tone: 'quiet', actionable: true };
     case 'sent':
-      return { label: 'Sent to cart', tone: 'good', actionable: false };
+      // Actionable, unlike every other terminal state: a sent row is the one place where
+      // "I picked the wrong size" is both likely and still fixable in the store's app, so
+      // the sheet has to stay reachable. It is the only route to it -- tapping the name
+      // checks the item off.
+      return { label: 'Sent to cart', tone: 'good', actionable: true };
     case 'unresolved':
       return hasStore
         ? { label: 'Find', spoken: 'find at the store', tone: 'quiet', actionable: true }

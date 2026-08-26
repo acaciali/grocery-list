@@ -179,6 +179,16 @@ export default function ItemSheet({
           </div>
         ) : (
           <>
+            {/* Nothing below can reach into the cart: the Public API is add-only. Saying so
+                here is the difference between "this control is broken" and "this control is
+                for next time". */}
+            {match?.status === 'sent' && (
+              <p className="mt-5 rounded-card border border-line bg-bg p-3 text-sm text-ink-soft">
+                Already sent to your cart. Changes here apply to the next send — Kroger
+                can&apos;t remove what we already added, so take things out in their app.
+              </p>
+            )}
+
             {product && (
               <div className="mt-5 border-t border-line pt-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">

@@ -17,6 +17,7 @@ import {
   type StoreProduct,
   type Unit,
 } from '@grocery/shared';
+import type { SendLineResult } from './api';
 import { parseEntry, type ParsedEntry } from './parseEntry';
 
 export type Row = GroceryItem & { id: string };
@@ -221,4 +222,31 @@ export async function resetMatches(rows: Row[]): Promise<number> {
   }
   await batch.commit();
   return rows.length;
+}
+
+// --- Cart ------------------------------------------------------------------------------
+
+/**
+ * Record what actually landed in the store cart.
+ *
+ * Only the successful lines are touched. A failed line stays 'matched', which leaves it in
+ * the next send's plan -- so "try again" is the same button, doing the same thing, to a
+ * smaller list. Marking it 'sent' would hide a line that never arrived.
+ *
+ * Dotted field paths rather than a whole `match` object: the resolver's candidates,
+ * confidence and chosenBy are still true after a send, and rewriting the map would drop
+ * them. `sentAt` reads back null on the local echo, like every serverTimestamp().
+ */
+export async function markSent(results: SendLineResult[]): Promise<number> {
+  const ok = results.filter((r) => r.ok);
+  if (ok.length === 0) return 0;
+  const batch = writeBatch(db);
+  for (const line of ok) {
+    batch.update(doc(db, 'groceries', line.itemId), {
+      'match.status': 'sent',
+      'match.sentAt': serverTimestamp(),
+    });
+  }
+  await batch.commit();
+  return ok.length;
 }

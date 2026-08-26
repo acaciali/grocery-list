@@ -11,11 +11,26 @@ const BASE =
     ? `http://127.0.0.1:5001/${firebaseConfig.projectId}/us-central1`
     : `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`);
 
+/**
+ * Carries the HTTP status through, because one status is load-bearing: addToCart answers
+ * 401 when the user's Kroger authorization is missing or dead, and that is a "link your
+ * account" prompt rather than an error message.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `${path} failed (${res.status})`);
+    throw new ApiError(body?.error ?? `${path} failed (${res.status})`, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -77,4 +92,61 @@ export function rememberChoice(
   product: StoreProduct,
 ): Promise<void> {
   return post<{ ok: true }>('/rememberChoice', { uid, term, product }).then(() => undefined);
+}
+
+// --- Cart ------------------------------------------------------------------------------
+
+/** Pickup or delivery. Kroger wants it per cart-add call, not per account. */
+export type Modality = 'PICKUP' | 'DELIVERY';
+
+/** Mirrors MAX_LINES in functions/src/cart-lines.ts. Callers must slice before sending. */
+export const MAX_CART_LINES = 100;
+
+export interface SendLine {
+  itemId: string;
+  upc: string;
+  quantity: number;
+}
+
+export interface SendLineResult {
+  itemId: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface SendResult {
+  batchId: string;
+  results: SendLineResult[];
+}
+
+/** Whether this user has live Kroger authorization. Cart writes need it; search does not. */
+export function krogerLinked(uid: string, signal?: AbortSignal): Promise<boolean> {
+  return request<{ linked: boolean }>(`/krogerStatus?uid=${encodeURIComponent(uid)}`, {
+    signal,
+  }).then((b) => b.linked);
+}
+
+/**
+ * The URL to send the browser to for Kroger's consent screen. `redirect` is where the
+ * callback returns the user afterwards, and the server checks it against an origin
+ * allowlist -- an unlisted origin is a 400, not a silent redirect somewhere else.
+ */
+export function krogerAuthUrl(uid: string, redirect: string): Promise<string> {
+  return request<{ url: string }>(
+    `/krogerAuthUrl?uid=${encodeURIComponent(uid)}&redirect=${encodeURIComponent(redirect)}`,
+  ).then((b) => b.url);
+}
+
+/**
+ * Push lines into the store cart. Fire-and-forget by nature: Kroger's Public API cannot
+ * read a cart back, so `results` is the only account of what happened and a re-send
+ * duplicates rather than reconciling.
+ */
+export function sendToCart(input: {
+  uid: string;
+  locationId: string;
+  modality: Modality;
+  lines: SendLine[];
+}): Promise<SendResult> {
+  return post<SendResult>('/addToCart', input);
 }
