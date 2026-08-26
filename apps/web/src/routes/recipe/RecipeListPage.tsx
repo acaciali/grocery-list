@@ -29,6 +29,17 @@ export default function RecipeListPage() {
         </Link>
       </div>
 
+      {/* 🥫➜🍳 The way in to pantry matching. Offered only once there is a cookbook to
+          rank -- on an empty account it would lead straight to an empty state. */}
+      {rows.length > 0 && (
+        <Link
+          to="/recipe/cook"
+          className="flex min-h-12 items-center justify-center gap-2 rounded-card border border-accent bg-surface px-4 text-sm font-semibold text-accent active:opacity-80"
+        >
+          🥫 Cook from my pantry
+        </Link>
+      )}
+
       {error && (
         <p role="alert" className="rounded-card border border-warn px-4 py-3 text-sm text-warn">
           {error}

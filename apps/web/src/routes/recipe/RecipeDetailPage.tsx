@@ -6,15 +6,15 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db, type Recipe } from '@grocery/shared';
+import { getRecipe, type Recipe, type RecipeRow } from '@grocery/shared';
 import type { AddSummary } from '../grocery/addFromRecipe';
 import AddToGrocerySheet from './AddToGrocerySheet';
+import { summarizeAdds } from './cookFromPantry';
 import { formatMeasure } from './quantity';
 
 type Load =
   | { status: 'loading' }
-  | { status: 'ready'; recipe: Recipe }
+  | { status: 'ready'; recipe: RecipeRow }
   | { status: 'missing' }
   | { status: 'error' };
 
@@ -152,17 +152,6 @@ function RecipeBody({
   );
 }
 
-/**
- * "Added 6, topped up 2" — what actually happened, rather than a flat "Added to list".
- * A merge is the surprising outcome, so it gets named.
- */
-function summarize(summary: AddSummary): string {
-  const parts: string[] = [];
-  if (summary.added > 0) parts.push(`Added ${summary.added}`);
-  if (summary.merged > 0) parts.push(`topped up ${summary.merged} already on your list`);
-  return parts.length === 0 ? 'Nothing to add' : `${parts.join(', ')}.`;
-}
-
 export default function RecipeDetailPage() {
   const { id } = useParams<'id'>();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
@@ -174,7 +163,9 @@ export default function RecipeDetailPage() {
 
   function finish(summary: AddSummary) {
     setSheetOpen(false);
-    setToast(summarize(summary));
+    // One summary, but the same sentence the pantry screen builds from several -- the
+    // wording lives in one place so the two confirmations cannot drift apart.
+    setToast(summarizeAdds([summary]));
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }
@@ -191,13 +182,12 @@ export default function RecipeDetailPage() {
 
     void (async () => {
       try {
-        const snap = await getDoc(doc(db, 'recipes', id));
+        // getRecipe, not a raw getDoc + cast: the same adapter the cookbook list reads
+        // through, so a recipe written by the un-ported vanilla form opens with a title
+        // and with keyed ingredients the grocery sheet can actually match on.
+        const recipe = await getRecipe(id);
         if (cancelled) return;
-        setLoad(
-          snap.exists()
-            ? { status: 'ready', recipe: snap.data() as Recipe }
-            : { status: 'missing' },
-        );
+        setLoad(recipe ? { status: 'ready', recipe } : { status: 'missing' });
       } catch (err) {
         console.error(err);
         if (cancelled) return;
