@@ -53,10 +53,15 @@ export function describeExpiry(ts: Timestamp | null | undefined): ExpiryNote | n
   if (days === 1) return { label: 'Expires tomorrow', urgent: true };
   if (days <= 3) return { label: `Expires in ${days} days`, urgent: true };
 
+  // Only spell out the year when it isn't the current one -- "Expires Dec 20" is fine for
+  // this year, but a 2028 date showing as "Expires Dec 20" reads as two weeks away.
+  const sameYear = startOfTarget.getFullYear() === startOfToday.getFullYear();
+
   return {
     label: `Expires ${startOfTarget.toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
+      ...(sameYear ? {} : { year: 'numeric' }),
     })}`,
     urgent: false,
   };

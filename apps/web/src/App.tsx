@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import { ensureSignedIn } from '@grocery/shared';
 import GroceryPage from './routes/grocery/GroceryPage';
+import AddItemPage from './routes/inventory/AddItemPage';
 import InventoryPage from './routes/inventory/InventoryPage';
 import RecipeDetailPage from './routes/recipe/RecipeDetailPage';
 import RecipeListPage from './routes/recipe/RecipeListPage';
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="/recipe/new" element={<RecipePage />} />
           <Route path="/recipe/:id" element={<RecipeDetailPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/inventory/add" element={<AddItemPage />} />
           <Route path="/grocery" element={<GroceryPage />} />
         </Routes>
       </main>
