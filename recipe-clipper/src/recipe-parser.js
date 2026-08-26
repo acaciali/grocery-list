@@ -100,6 +100,7 @@ function parseRecipe(doc, sourceUrl) {
   return { ...found, sourceUrl };
 }
 
-if (typeof module !== 'undefined') {
-  module.exports = { parseRecipe };
-}
+// Injected by chrome.scripting as a CLASSIC script, so this file must not contain
+// import/export syntax. Publishing on globalThis is how both callers reach it: in the page
+// the declaration is already global, and the test suite imports the file for the side effect.
+globalThis.parseRecipe = parseRecipe;

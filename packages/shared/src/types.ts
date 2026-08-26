@@ -218,4 +218,9 @@ export interface AnalyzeShelfResponse {
   items: ShelfCandidate[];
   /** The pinned model that produced the candidates, for traceability. */
   model: string;
+  /**
+   * True when the items are a demo fixture rather than real model output. The UI must
+   * say so -- a spoofed scan that looks real is how a demo becomes a lie.
+   */
+  stubbed?: boolean;
 }

@@ -16,7 +16,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import type { AnalyzeShelfResponse } from '@grocery/shared/types';
-import { toShelfCandidates, validateShelfRequest } from './shelf';
+import { DEMO_CANDIDATES, toShelfCandidates, validateShelfRequest } from './shelf';
 
 const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
 
@@ -70,6 +70,19 @@ export const analyzeShelf = onRequest(
       return;
     }
     const { image, mediaType } = validated.value;
+
+    // Demo mode: skip the model call and return a fixture. The photo is still uploaded,
+    // downscaled, validated, normalized and written for real -- only identification is
+    // faked. Flagged `stubbed` so the UI can label it; never enable this in production.
+    if (process.env.SHELF_DEMO_MODE === 'true') {
+      const demo: AnalyzeShelfResponse = {
+        items: toShelfCandidates([...DEMO_CANDIDATES]),
+        model: 'demo-fixture',
+        stubbed: true,
+      };
+      res.json(demo);
+      return;
+    }
 
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 

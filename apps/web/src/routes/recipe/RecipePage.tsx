@@ -6,6 +6,7 @@
  * drifting field is a compile error rather than an integration bug.
  */
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import {
   db,
@@ -64,6 +65,7 @@ function starterRows(firstId: number): IngredientRow[] {
 }
 
 export default function RecipePage() {
+  const navigate = useNavigate();
   const nextRowId = useRef(STARTER_ROWS);
   const [title, setTitle] = useState('');
   const [counts, setCounts] = useState<Record<CountField, string>>(BLANK_COUNTS);
@@ -207,7 +209,9 @@ export default function RecipePage() {
         createdAt: serverTimestamp(),
       });
       resetForm();
-      showToast('Recipe saved');
+      // Land on the cookbook so the new tile is the confirmation, rather than an emptied
+      // form that looks like nothing happened.
+      navigate('/recipe');
     } catch (err) {
       console.error(err);
       showToast("Couldn't save", 'error');
@@ -221,7 +225,11 @@ export default function RecipePage() {
   const labelClass = 'text-xs font-bold uppercase tracking-wide text-ink-soft';
 
   return (
-    <section>
+    <section className="space-y-4">
+      <Link to="/recipe" className="inline-flex text-sm font-semibold text-ink-soft hover:text-ink">
+        ← Cookbook
+      </Link>
+
       <form onSubmit={saveRecipe} className="space-y-5">
         <div className="space-y-1.5">
           <label htmlFor="recipe-title" className={labelClass}>

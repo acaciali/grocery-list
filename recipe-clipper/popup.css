@@ -304,3 +304,18 @@ button:focus-visible {
   letter-spacing: normal;
   color: #a8b2bf;
 }
+
+/* ---- inline validation message, shown without leaving the review form ---- */
+
+#review-error {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 600;
+}
+
+#review-error[hidden] {
+  display: none;
+}

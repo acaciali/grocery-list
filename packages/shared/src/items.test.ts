@@ -33,6 +33,12 @@ describe('normalizeKey', () => {
     ['1 onion, finely chopped', 'onion-finely'],
     ['freshly ground black pepper', 'ground-black-pepper'],
 
+    // -ies is only a -y plural when the singular ends in -y. "cooky" is not a word.
+    ['cookies', 'cookie'],
+    ['twinkies', 'twinkie'],
+    ['berries', 'berry'],
+    ['pastries', 'pastry'],
+
     // Storage state is a descriptor, not identity -- a recipe's "peas" must match
     // the freezer's "frozen peas". The state lives in category/location instead.
     ['frozen peas', 'pea'],
@@ -80,6 +86,13 @@ describe('normalizeKey', () => {
       // Currently 'onion-finely' -- "finely" survives because only "chopped" is a
       // descriptor. Dropping everything after the comma is the obvious alternative.
       expect(normalizeKey('1 onion, finely chopped')).toBe('onion');
+    });
+
+    it('should a proper noun ending in -s survive singularization?', () => {
+      // 'Amos' -> 'amo': the trailing-s rule cannot tell a plural from a name.
+      // Low impact by design (brands go in the `brand` field, not `name`), but it
+      // would bite if a brand ever leaked into a name. Needs a dictionary to fix properly.
+      expect(normalizeKey('Famous Amos cookies')).toBe('famous-amos-cookie');
     });
 
     it('should "ground" be a descriptor or part of the identity?', () => {

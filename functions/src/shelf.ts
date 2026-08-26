@@ -79,3 +79,31 @@ export function toShelfCandidates(raw: RawCandidate[]): ShelfCandidate[] {
   }
   return [...byKey.values()];
 }
+
+/**
+ * Demo fixture for SHELF_DEMO_MODE -- a real snack shelf, so the demo exercises the whole
+ * pipeline (upload -> downscale -> HTTP -> normalizeKey -> review grid -> batch write)
+ * with only the model call faked.
+ *
+ * Responses built from this are flagged `stubbed: true` so the UI says so out loud.
+ * Names stay generic with brands separate, exactly as real model output would be, and
+ * confidences vary the way genuine detections do.
+ */
+export const DEMO_CANDIDATES: readonly RawCandidate[] = [
+  { name: 'pretzels', brand: "Dot's", category: 'pantry', confidence: 0.95, note: null },
+  { name: 'twinkies', brand: 'Hostess', category: 'bakery', confidence: 0.93, note: null },
+  { name: 'donettes', brand: 'Hostess', category: 'bakery', confidence: 0.89, note: null },
+  { name: 'cupcakes', brand: 'Hostess', category: 'bakery', confidence: 0.84, note: null },
+  { name: 'chocolate candies', brand: "M&M's", category: 'pantry', confidence: 0.92, note: null },
+  { name: 'cookies', brand: 'Famous Amos', category: 'bakery', confidence: 0.88, note: null },
+  { name: 'fruit chews', brand: 'Starburst', category: 'pantry', confidence: 0.81, note: null },
+  { name: 'gummy bears', brand: null, category: 'pantry', confidence: 0.76, note: null },
+  { name: 'trail mix', brand: null, category: 'pantry', confidence: 0.68, note: null },
+  {
+    name: 'chocolate covered cinnamon bears',
+    brand: null,
+    category: 'pantry',
+    confidence: 0.44,
+    note: 'unusual item, partially behind other packages',
+  },
+];
