@@ -5,6 +5,7 @@
  * Lives in routes/recipe/ rather than packages/shared because only the recipe form needs
  * it today. Promote it to shared if the import path or Inventory ends up wanting it too.
  */
+import type { Item } from '@grocery/shared';
 
 /** Unicode vulgar fractions, which recipe.md flags as arriving from scraped pages. */
 const VULGAR_FRACTIONS = new Map<string, string>([
@@ -124,4 +125,16 @@ export function formatQuantity(value: number): string {
   }
 
   return String(Math.round(value * 100) / 100);
+}
+
+/**
+ * "1 1/2 cup" -- the measurement half of an ingredient line, blank when unmeasured.
+ *
+ * Shared by the detail view and the add-to-groceries sheet so an ingredient reads the same
+ * in both places; a cook comparing the two should not have to wonder whether "0.5" and
+ * "1/2" are the same amount.
+ */
+export function formatMeasure(item: Pick<Item, 'quantity' | 'unit'>): string {
+  const amount = item.quantity == null ? '' : formatQuantity(item.quantity);
+  return [amount, item.unit ?? ''].filter(Boolean).join(' ');
 }
