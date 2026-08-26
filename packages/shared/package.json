@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./items": "./src/items.ts",
     "./types": "./src/types.ts",
+    "./store": "./src/store/index.ts",
     "./sparkle-cursor": "./src/sparkle-cursor.js"
   },
   "scripts": {

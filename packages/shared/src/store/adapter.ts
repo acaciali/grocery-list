@@ -1,4 +1,4 @@
-import type { StoreLocation, StoreProduct } from '@grocery/shared/types';
+import type { StoreLocation, StoreProduct } from '../types.js';
 
 export type Modality = 'PICKUP' | 'DELIVERY';
 

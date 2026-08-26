@@ -1,5 +1,5 @@
 import type { Category, StoreLocation, StoreProduct } from '@grocery/shared/types';
-import type { CartLine, Modality, StoreAdapter } from './adapter.js';
+import type { CartLine, Modality, StoreAdapter } from '@grocery/shared/store';
 import { clientToken, invalidateClientToken, krogerBaseUrl } from './token.js';
 
 /** Kroger department strings -> our Category union. Anything unmapped falls to 'other'. */

@@ -1,17 +1,6 @@
 import type { StoreProduct } from '@grocery/shared/types';
+import { prefDocId, queryKey } from '@grocery/shared/store';
 import { db, withDeadline } from '../db.js';
-
-/**
- * Cache keys are the QUERY TEXT, not the shared ItemKey.
- *
- * normalizeKey() deliberately strips descriptors, so "whole milk" and "2% milk" both
- * produce the key `milk`. Keying a product cache on that would confidently serve whole
- * milk to someone who asked for 2%. `key` is the cross-app join column; "what did this
- * search return" is a different question and needs its own key.
- */
-export function queryKey(term: string): string {
-  return term.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 120);
-}
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -75,7 +64,7 @@ export async function readProductPref(
     const snap = await withDeadline(
       db()
         .collection('users').doc(uid)
-        .collection('productPrefs').doc(queryKey(term).replace(/\//g, '_'))
+        .collection('productPrefs').doc(prefDocId(term))
         .get(),
       'product pref read',
     );
@@ -98,7 +87,7 @@ export async function writeProductPref(
   await withDeadline(
     db()
       .collection('users').doc(uid)
-      .collection('productPrefs').doc(queryKey(term).replace(/\//g, '_'))
+      .collection('productPrefs').doc(prefDocId(term))
       .set({ product, term: queryKey(term), updatedAtMs: Date.now() }),
     'product pref write',
   );

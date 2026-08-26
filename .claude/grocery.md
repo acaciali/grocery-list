@@ -426,11 +426,20 @@ found-nothing does not).
 - Prices and stock are per-location and Kroger **omits them entirely** without
   `filter.locationId`. That is why `locationId` lives on `StoreMatch` (see F4).
 - Functions bundle via esbuild, inlining `@grocery/shared` raw TS. Import from
-  `@grocery/shared/items` or `/types`, **never the package root** — the root barrel pulls in
-  the client Firebase SDK. `health.ts` calls `normalizeKey()` on purpose so a broken bundle
-  fails the health check instead of producing wrong matches weeks later.
+  `@grocery/shared/items`, `/types` or `/store`, **never the package root** — the root
+  barrel pulls in the client Firebase SDK. `health.ts` calls `normalizeKey()` on purpose so
+  a broken bundle fails the health check instead of producing wrong matches weeks later.
 - `STORE_ADAPTER=mock` forces `MockStore` even with credentials. Use it if Kroger is
   rate-limited or down mid-demo.
+- **Two store modes, because deploying a Function needs Blaze and we ship on Spark.**
+  `VITE_STORE_MODE` picks between `localStore` (mock in the browser, the default) and
+  `functionsStore` (HTTP, the only path to live Kroger). Both satisfy `StoreApi` in
+  `storeApi.ts`; no component knows which is live. The mock fixtures, the scoring, the
+  cart-line validation and the pref doc-id derivation all live in `@grocery/shared/store`
+  so the two modes cannot drift — if you add store logic, put it there, not in one side.
+- **`isDemoStore` is a correctness requirement, not a flourish.** In local mode every price
+  is invented. The store chip, the send panel, and the post-send message all label it.
+  Anything new that shows a price or claims a send has to do the same.
 - `firestore.rules` in test mode expires. Set a reminder or the app dies mid-demo.
 - Don't regress the existing app. Whatever else happens, someone's real grocery list has to
   keep working.

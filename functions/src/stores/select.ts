@@ -1,6 +1,5 @@
-import type { StoreAdapter } from './adapter.js';
+import { MockStore, type StoreAdapter } from '@grocery/shared/store';
 import { KrogerStore } from './kroger.js';
-import { MockStore } from './mock.js';
 
 /**
  * MockStore unless real credentials are present, so a fresh clone demos with zero setup
