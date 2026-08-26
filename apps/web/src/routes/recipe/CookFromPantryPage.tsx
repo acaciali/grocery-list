@@ -246,7 +246,7 @@ export default function CookFromPantryPage() {
         // Offer to widen rather than showing nothing: there ARE matches, just not this close.
         <div className="rounded-card border border-line bg-surface p-6 text-center shadow-sm">
           <p className="text-sm text-ink-soft">
-            Nothing you can cook with {maxMissing === 0 ? 'nothing' : `${maxMissing} or fewer`} to
+            Nothing you can cook with {maxMissing === 0 ? 'nothing' : `${maxMissing} or fewer ingredients`} to
             buy.
           </p>
           <button
