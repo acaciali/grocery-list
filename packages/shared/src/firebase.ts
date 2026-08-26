@@ -9,12 +9,39 @@ import {
   signInAnonymously,
   type User,
 } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator,
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from 'firebase/firestore';
 import { firebaseConfig } from './firebase-config.js';
 
 const app = getApps()[0] ?? initializeApp(firebaseConfig);
 
-export const db = getFirestore(app);
+/**
+ * Persistent local cache rather than the in-memory default. A grocery list gets used
+ * inside a store on bad signal, where the memory cache means a blank screen; with this,
+ * the last synced list is there and edits queue until the connection comes back.
+ *
+ * Multi-tab manager so a second tab shares the IndexedDB lease instead of being denied it.
+ *
+ * initializeFirestore throws once Firestore has been started for this app -- which happens
+ * under Vite HMR -- so fall back to the running instance rather than taking the page down.
+ */
+function startFirestore(): Firestore {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch {
+    return getFirestore(app);
+  }
+}
+
+export const db = startFirestore();
 export const auth = getAuth(app);
 
 let emulatorsConnected = false;

@@ -19,13 +19,13 @@ const AISLE_LABEL: Record<Category, string> = {
 
 interface Props {
   items: Row[];
-  grouped: boolean;
+  hasStore: boolean;
   onToggle: (row: Row) => void;
   onDelete: (id: string) => void;
-  onOpenMatch: (row: Row) => void;
+  onOpen: (row: Row) => void;
 }
 
-export default function GroceryList({ items, grouped, onToggle, onDelete, onOpenMatch }: Props) {
+export default function GroceryList({ items, hasStore, onToggle, onDelete, onOpen }: Props) {
   if (items.length === 0) {
     return (
       <p className="rounded-card border border-line bg-surface p-6 text-center text-sm text-ink-soft">
@@ -37,11 +37,11 @@ export default function GroceryList({ items, grouped, onToggle, onDelete, onOpen
   const unchecked = items.filter((i) => !i.checked);
   const checked = items.filter((i) => i.checked);
 
-  const rowProps = { onToggle, onDelete, onOpenMatch };
+  const rowProps = { hasStore, onToggle, onDelete, onOpen };
 
   // Grouping only helps once there is enough on the list to walk around a store with,
   // and only for the items you still need.
-  if (!grouped || unchecked.length < 4) {
+  if (!hasStore || unchecked.length < 4) {
     return (
       <ul className="space-y-2">
         {[...unchecked, ...checked].map((row) => (

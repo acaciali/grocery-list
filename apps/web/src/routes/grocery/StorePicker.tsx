@@ -14,10 +14,17 @@ interface Props {
   currentLocationId: string | null;
   initialZip: string | null;
   onPick: (store: ConnectedStore, zip: string) => Promise<void>;
+  onDisconnect: () => Promise<void>;
   onClose: () => void;
 }
 
-export default function StorePicker({ currentLocationId, initialZip, onPick, onClose }: Props) {
+export default function StorePicker({
+  currentLocationId,
+  initialZip,
+  onPick,
+  onDisconnect,
+  onClose,
+}: Props) {
   const [zip, setZip] = useState(initialZip ?? '');
   const [stores, setStores] = useState<StoreLocation[] | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -145,6 +152,19 @@ export default function StorePicker({ currentLocationId, initialZip, onPick, onC
               );
             })}
           </ul>
+        )}
+
+        {currentLocationId !== null && (
+          <button
+            type="button"
+            onClick={() => {
+              void onDisconnect();
+              onClose();
+            }}
+            className="mt-4 min-h-12 w-full rounded-card border border-line font-semibold text-ink-soft hover:text-warn"
+          >
+            Shop without a store
+          </button>
         )}
 
         <p className="mt-4 text-center text-xs text-ink-soft">

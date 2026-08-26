@@ -17,9 +17,13 @@ built. **Nothing has run against the live Kroger API** — every result so far i
 **`resolveItems` is verified.** It was hanging, not crashing — see B1 below. All four
 fixture states now come back correctly over HTTP from the emulator.
 
-⚠️ **The match model renders correctly but is barely reachable.** `resolveItems` and
-`rememberChoice` exist on the backend and are never called from the frontend, and an
-`unresolved` item has no tap target at all. Fixing that is the top frontend task.
+✅ **The frontend track (F1–F5) is done.** The match model is fully reachable: every row
+opens an item sheet, unresolved items batch-resolve against the connected store, user
+corrections are remembered, and a store switch invalidates stale matches. F6 (cart UI) is
+now unblocked — backend B3 has landed.
+
+⚠️ **None of it has been seen in a browser.** Typecheck, tests and build are the only
+verification so far.
 
 ---
 
@@ -28,7 +32,7 @@ fixture states now come back correctly over HTTP from the emulator.
 | | Backend track | Frontend track |
 |---|---|---|
 | **Owns** | `functions/**`, `firestore.rules`, deploys | `apps/web/src/routes/grocery/**` |
-| **Goal** | ~~Verify the resolver, then build cart push~~ — both done. Now: live Kroger + deploy | Make the match model reachable |
+| **Goal** | ~~Verify the resolver, then build cart push~~ — both done. Now: live Kroger + deploy | ✅ F1–F5 done. Now: F6, the cart UI |
 | **Blocked by** | B2 and B4 need credentials, `firebase login`, and a JRE | Nothing — **F6 is unblocked, B3 is built** |
 
 ### The seam: HTTP contract
@@ -44,12 +48,12 @@ GET  /findStores?zip=84604
 GET  /searchProducts?q=milk&locationId=01400376
      -> { products: StoreProduct[] }
 
-POST /resolveItems                                    ✅ built + verified
+POST /resolveItems                                    ✅ built + verified + called
      { locationId: string, uid?: string,
        items: [{ id: string, name: string }] }        // max 50
      -> { matches: { [id: string]: StoreMatch } }
 
-POST /rememberChoice                                  ✅ built, never called
+POST /rememberChoice                                  ✅ built + called
      { uid: string, term: string, product: StoreProduct }
      -> { ok: true }
 
@@ -91,7 +95,9 @@ anywhere.** `/krogerAuthUrl` hands back our own `/krogerCallback` with a fake co
 ### Files both tracks might touch — coordinate first
 
 - `packages/shared/src/types.ts` — additive only, announce, second reviewer
-- `packages/shared/src/firebase.ts` — frontend needs `persistentLocalCache` (F5)
+- `packages/shared/src/firebase.ts` — ⚠️ **already changed**: `db` now starts via
+  `initializeFirestore` with `persistentLocalCache` instead of `getFirestore`. Behaviour is
+  additive (offline reads + queued writes) and affects every team. Needs a second reviewer.
 - `.claude/grocery.md` — this file; expect conflicts, resolve by keeping both sides
 
 ---
@@ -222,56 +228,82 @@ npm run backfill -w functions -- --apply   # write
 
 # 🎨 FRONTEND TRACK
 
-All under `apps/web/src/routes/grocery/` unless noted.
+All under `apps/web/src/routes/grocery/` unless noted. **F1–F5 are complete.**
 
-## F1 · Give `unresolved` items an affordance 🔴
+## F1 · Give `unresolved` items an affordance ✅
 
-`MatchChip` returns `null` for `unresolved` (`MatchChip.tsx:68`) and is the only thing wired
-to `onOpenMatch`. A plain-text item therefore has **no way to be matched** — it just sits
-there. This is the exact case the feature was built for.
+`MatchChip` used to return `null` for `unresolved`, so a plain-text item had no route to
+the store at all. Now **every row has exactly one opener** in the chip slot, and all of
+them open the same item sheet:
 
-- [ ] Render something tappable for `unresolved` when a store is connected
-- [ ] Keep it quiet — this is the common state, not an error. No red, no badge count.
-- [ ] With no store connected, keep rendering nothing (the list must stay clean without one)
+| Row state | Opener |
+|---|---|
+| Store connected, unresolved | quiet `Find` |
+| No store connected | quiet `⋯` |
+| Matched / ambiguous / out of stock / not found / not sold | the status itself |
+| Resolving / sent | plain text, not tappable |
 
-## F2 · Call `resolveItems` 🔴
+Each carries an `aria-label` naming the item, because `Find` and `⋯` say nothing on their
+own in a list of twenty rows.
 
-The endpoint exists; nothing calls it. Without this, type-ahead is the only path to a match
-and anything from I1/I2 stays `unresolved` forever.
+## F2 · Call `resolveItems` ✅ — `useMatchSync.ts`
 
-- [ ] Add `resolveItems()` to `api.ts` (contract above)
-- [ ] Resolve `unresolved` items when the page has a store connected — batch them, cap at 50
-- [ ] Set `status: 'resolving'` while in flight. `MatchChip` already renders it; nothing
-      currently sets it.
-- [ ] Write results back through `setMatch()` in `data.ts`
-- [ ] Add an `aria-live="polite"` announcement — background matching is otherwise invisible
-      to screen readers
+Batches unresolved rows (cap 50, `RESOLVE_BATCH_LIMIT`), writes results back through
+`setMatch`, and announces the outcome through an `aria-live` region on the page.
 
-## F3 · Call `rememberChoice` 🔴
+Three decisions worth knowing before changing it:
 
-`chosenBy: 'memory'` and the ★ in `MatchChip` are unreachable dead code until this exists.
+- **`resolving` is never written to Firestore.** It is a fact about *this tab's* network
+  request. Persisting it would strand rows mid-spinner whenever a tab closes at the wrong
+  moment, and would show every other client a spinner for a request they are not making.
+  `GroceryPage` layers it on for display instead.
+- **Checked rows are skipped.** They are already in the basket, and Products is capped near
+  10,000 calls/day across the whole account.
+- **An `attempted` set prevents retry storms.** Every Firestore snapshot re-runs the effect;
+  without it, an unreachable store would be hammered once per keystroke elsewhere on the
+  page. It is cleared on a store switch, and `retry(id)` re-arms a single row for the
+  "check the store again" path.
 
-- [ ] On a user correction in `MatchPicker`, POST the choice
-- [ ] Verify a corrected item resolves straight to that product next time
+Resolution failure is deliberately silent (console only). The list is fully usable
+unmatched, and a toast per snapshot while the store is down is worse than no store at all.
 
-## F4 · Store-switch invalidation
+## F3 · Call `rememberChoice` ✅
 
-Matches carry a `locationId`; switching stores currently leaves the old store's prices on
-screen. Correctness bug, not polish.
+Fires on a user correction in the item sheet, keyed on `row.name` — **the same text
+`resolveItems` sends**, which is what makes the memory hit next time. Best-effort with a
+`.catch`: a failed memory costs a better guess later, never the choice just made.
 
-- [ ] On switch, reset matches whose `locationId` no longer matches — **except `not_sold`**,
-      which is a statement about the item, not the store
-- [ ] Banner: "Store changed · N items need re-checking"
+## F4 · Store-switch invalidation ✅
 
-## F5 · Smaller gaps
+`isStaleMatch()` in `matchState.ts`, applied by `useMatchSync`, with a banner on the page.
+Stale matches reset to `unresolved`, and F2 immediately re-resolves them at the new store.
 
-- [ ] `cartQuantity` stepper — field exists, no UI. Show pack size next to it so "2 lb
-      chicken" vs a 1.5 lb package is legible.
-- [ ] Inline quantity editing
-- [ ] Firestore `persistentLocalCache` in `packages/shared/src/firebase.ts` *(shared file —
-      announce)*. This app gets used inside a store on bad signal.
-- [ ] Upsert-by-key in `data.ts` — adding a duplicate bumps quantity instead of adding a row
-- [ ] `useConnectedStore.disconnect` is defined and unused — wire it or drop it
+**Two statuses deliberately survive a switch**: `not_sold` (a statement about the item, not
+the store) and `sent` (a record of something that actually happened, and it shows no price).
+This is the load-bearing logic of the whole feature — get it wrong and it silently destroys
+good data — so it lives in a pure module with tests rather than inside the Firestore layer.
+
+## F5 · Smaller gaps ✅
+
+- **`MatchPicker.tsx` → `ItemSheet.tsx`.** It is no longer only about matching: it now holds
+  the amount editor, the package stepper, and the product picker. It **opens without a store
+  connected** — editing an amount has nothing to do with Kroger, and gating it would make the
+  list worse for anyone who never connects a store.
+- **Amount editing** (quantity + unit) saves on blur and on close, not per keystroke: a
+  number input passes through states like `""` and `"1."` that nobody means to store.
+- **`cartQuantity` stepper** with the pack size beside it (`1 gal each`), which is the entire
+  point — 2 lb of chicken against a 1.5 lb package is 2 packages, not 2 lb.
+- **Upsert-by-key** in `data.ts`. Adding a duplicate bumps the existing row and toasts
+  "Already on your list — now 3 lb milk". Only merges **unchecked** rows (a checked row is
+  done; changing it behind the user is wrong) and only when units are compatible — `2 lb` and
+  `3 cup` stay separate rows rather than becoming a nonsense `5`.
+- **`persistentLocalCache`** in `packages/shared/src/firebase.ts` *(shared file — announced
+  below)*. Multi-tab manager, with a try/catch fallback to `getFirestore()` because
+  `initializeFirestore` throws on Vite HMR re-runs.
+- **`disconnect` wired** into `StorePicker` as "Shop without a store".
+- **`safeKey()`** in `data.ts`: `normalizeKey` throws on a name with no identifying words
+  ("???"). A key is a nice-to-have on a grocery row, so a weird name now loses cross-app
+  matching rather than losing the item.
 
 ## F6 · Cart UI — ✅ unblocked, B3 is built
 
@@ -288,6 +320,16 @@ screen. Correctness bug, not polish.
       current cart contents — we cannot know them.
 - [ ] Modality selector (pickup/delivery)
 
+## Still owed on the frontend
+
+- [ ] **A browser pass. None of this has been seen rendered.** Keyboard-only through the
+      combobox and item sheet, a screen-reader check on the `aria-live` announcement, and a
+      phone-width check on the sheet.
+- [ ] End-to-end confirmation of F2 — it cannot be trusted until backend **B1** proves
+      `resolveItems` actually returns matches.
+- [ ] Legacy safety: a `groceries` doc with only `{name, checked, createdAt}` should render,
+      check off, delete, and now also resolve.
+
 ---
 
 ## ⚠️ Corrections to CLAUDE.md — need team sign-off
@@ -300,6 +342,8 @@ screen. Correctness bug, not polish.
 3. **`ensureSignedIn()` was never called.** Now called from `App.tsx` — deliberately
    *without* gating route rendering, since a failed anonymous sign-in must not take down a
    grocery list that predates auth and has open rules.
+4. **`packages/shared/src/firebase.ts` now uses `initializeFirestore` + `persistentLocalCache`.**
+   Shared file, additive behaviour, needs a second reviewer per the CLAUDE.md rule.
 
 ---
 
@@ -312,7 +356,8 @@ endpoints in `cart.ts`, user-token storage in `stores/userTokens.ts`, lazy Fires
 deadlines in `db.ts`, the backfill script, and 41 unit tests that need no emulator.
 
 **Frontend:** store picker, type-ahead combobox, `parseEntry` (+9 tests), match chips,
-aisle grouping, correction picker, running price estimate with an explicit unpriced count,
+aisle grouping, the item sheet, batch resolution, store-switch invalidation, upsert-by-key,
+running price estimate with an explicit unpriced count,
 and the React port at full feature parity.
 
 **Contract:** `MatchStatus`, `StoreProduct`, `StoreMatch`, `StoreLocation`, `match?` on
@@ -369,7 +414,8 @@ found-nothing does not).
   de-dupe and I2 `has(key)` currently treat them as the same item, which is probably wrong.
   Skipped test in `items.test.ts`; needs the all-hands.
 - ⚠️ **`a dozen eggs` → `dozen-egg` but `eggs` → `egg`.** `LEADING_UNITS` has no `dozen`.
-  Defeats upsert-by-key (F5) and I1 de-dupe. One-line fix, deferred pending sign-off.
+  Defeats the upsert-by-key merge in `data.ts` and I1 de-dupe — `a dozen eggs` and `eggs`
+  land as two rows. One-line fix, deferred pending sign-off.
 - Kroger product names are messy. The scorer weights stemmed token *coverage* of the query
   and does **not** penalise extra brand words — "Kroger® 2% Reduced Fat Milk" is a good
   answer to "2% milk". Auto-accept needs ≥0.8 **and** a ≥0.15 gap to the runner-up. A
