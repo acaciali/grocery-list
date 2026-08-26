@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1d3557" />
+    <title>Add a Recipe</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="groceries-main">
+      <nav class="page-nav">
+        <a href="./recipes.html">&larr; Recipes</a>
+      </nav>
+
+      <h1 class="groceries-title">Add a Recipe</h1>
+
+      <form class="recipe-form" id="recipe-form" autocomplete="off">
+        <div class="field">
+          <label for="recipe-name">Name</label>
+          <input
+            id="recipe-name"
+            name="name"
+            type="text"
+            placeholder="Sunday chili"
+            required
+          />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="recipe-servings">Servings</label>
+            <input
+              id="recipe-servings"
+              name="servings"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="4"
+            />
+          </div>
+          <div class="field">
+            <label for="recipe-time">Total time (minutes)</label>
+            <input
+              id="recipe-time"
+              name="minutes"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="45"
+            />
+          </div>
+        </div>
+
+        <fieldset class="field ingredients">
+          <legend>Ingredients</legend>
+          <ul class="ingredient-list" id="ingredient-list"></ul>
+          <button class="add-row" type="button" id="add-ingredient">
+            + Add ingredient
+          </button>
+        </fieldset>
+
+        <div class="field">
+          <label for="recipe-steps">Instructions</label>
+          <textarea
+            id="recipe-steps"
+            name="instructions"
+            rows="8"
+            placeholder="One step per line…"
+          ></textarea>
+          <p class="field-hint">One step per line.</p>
+        </div>
+
+        <div class="form-actions">
+          <button class="primary" type="submit" id="save-recipe">
+            Save recipe
+          </button>
+          <button class="secondary" type="reset" id="reset-recipe">
+            Clear
+          </button>
+        </div>
+      </form>
+    </main>
+
+    <div class="status" id="status" hidden></div>
+
+    <script type="module" src="./recipes.js"></script>
+  </body>
+</html>

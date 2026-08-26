@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1d3557" />
+    <title>Recipes</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="groceries-main">
+      <nav class="page-nav">
+        <a href="./index.html">&larr; Grocery List</a>
+      </nav>
+
+      <h1 class="groceries-title">Recipes</h1>
+
+      <form class="add-item recipe-search" id="search-form" autocomplete="off">
+        <input
+          id="recipe-search"
+          type="search"
+          placeholder="Search recipes…"
+          aria-label="Search recipes"
+        />
+        <a class="button-link" href="./recipe.html">Add</a>
+      </form>
+
+      <ul class="recipe-list" id="recipe-list"></ul>
+    </main>
+
+    <div class="status" id="status" hidden></div>
+
+    <script type="module" src="./recipe-list.js"></script>
+  </body>
+</html>
