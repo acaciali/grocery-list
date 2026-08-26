@@ -147,6 +147,62 @@ items already sent are excluded from the next send for exactly that reason.
 Without credentials, everything above still runs against a built-in mock store,
 including the full linking round trip. That is the default on a fresh clone.
 
+## Step 9 (optional): Enable the shelf scanner
+
+📸 **Scan a shelf** in the Inventory tab sends the photo to Claude and gets back
+candidate pantry items. The frontend needs no configuration for this: it posts to
+the `analyzeShelf` Cloud Function for the `projectId` in
+`packages/shared/src/firebase-config.ts`. What it needs is that function to exist.
+
+This is the one feature that requires the pay-as-you-go Blaze plan, because it
+deploys a Cloud Function. It also needs an
+[Anthropic API key](https://console.anthropic.com), which is billed separately.
+
+1. Upgrade the project to Blaze in the Firebase console
+   (**⚙️ → Usage and billing → Details & settings**).
+2. Store the API key as a Firebase secret. It is never committed and never
+   reaches the browser:
+
+   ```sh
+   npx firebase functions:secrets:set ANTHROPIC_API_KEY
+   ```
+
+3. Deploy the function:
+
+   ```sh
+   npm run deploy:functions
+   ```
+
+4. Reload the app and scan a shelf. The review screen says
+   "Read from your photo by …" and names the model that read it.
+
+### Running it against the local emulator instead
+
+To iterate on the function without deploying, put the key in a local file
+(gitignored) and run the emulator:
+
+```sh
+echo 'ANTHROPIC_API_KEY=sk-ant-...' > functions/.secret.local
+npm run emulators
+```
+
+Then create `apps/web/.env.local` and point the frontend at it:
+
+```sh
+VITE_FUNCTIONS_EMULATOR=true
+```
+
+Values in `apps/web/.env.local` are compiled into the built JavaScript and are
+public. Never put an API key there — that is what the Cloud Function is for.
+
+### Working without the scanner
+
+Set `VITE_SHELF_STUB=true` in `apps/web/.env.local` to get a fixed demo shelf
+with no network call and no API spend. Both the capture screen and the review
+grid label themselves as demo data in that mode, so a canned result is never
+mistaken for a real one. Manual entry, staples, and everything else in the
+Inventory tab work with no function deployed at all.
+
 ## Costs
 
 Everything above runs on the free Firebase Spark plan. Its Firestore
@@ -166,5 +222,11 @@ pantry, and recipe features work without them.
 - **A blank page on GitHub Pages**: the `--base` path in
   `.github/workflows/deploy.yml` does not match the repository name. See
   Step 7.
+- **The shelf scanner says "isn't deployed yet"**: the `analyzeShelf` function
+  is not deployed to this project. See Step 9, or set `VITE_SHELF_STUB=true` in
+  `apps/web/.env.local` to use the demo shelf.
+- **The shelf scanner says "not configured"**: the function is deployed but
+  `ANTHROPIC_API_KEY` is missing or invalid. Re-run the
+  `functions:secrets:set` command in Step 9, then redeploy.
 - **`npm run dev` fails at startup**: check that `node --version` prints 22
   or later, then run `npm ci` again.

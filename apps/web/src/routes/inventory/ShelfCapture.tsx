@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { normalizeKey, type InventoryRow, type StorageLocation } from '@grocery/shared';
 import { pantry } from './pantryStore';
-import { AnalyzeShelfError, analyzeShelf } from './analyzeShelf';
+import { AnalyzeShelfError, analyzeShelf, isLive } from './analyzeShelf';
 import ReviewGrid, { type Candidate } from './ReviewGrid';
 import { HIGH_CONFIDENCE } from './constants';
 
@@ -32,6 +32,9 @@ export default function ShelfCapture({
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [location, setLocation] = useState<StorageLocation>('pantry');
   const [stubbed, setStubbed] = useState(false);
+  // Which pinned model read the shelf, so the review screen can say so rather than
+  // leaving the user to guess whether anything real happened.
+  const [model, setModel] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -108,6 +111,7 @@ export default function ShelfCapture({
     try {
       const result = await analyzeShelf(file);
       setStubbed(result.stubbed);
+      setModel(result.model);
 
       if (result.items.length === 0) {
         setMessage(
@@ -249,6 +253,13 @@ export default function ShelfCapture({
             </p>
           </div>
 
+          {!isLive && (
+            // Better to know before spending a photo than to find out on the review grid.
+            <p className="mt-3 rounded-card border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
+              Demo mode — the scanner is set to canned data, so your photo won't be read.
+            </p>
+          )}
+
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -302,6 +313,7 @@ export default function ShelfCapture({
           candidates={candidates}
           location={location}
           stubbed={stubbed}
+          model={model}
           saving={saving}
           onChange={patchCandidate}
           onLocationChange={setLocation}

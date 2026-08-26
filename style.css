@@ -1,12 +1,16 @@
+/* Shared palette: Almond Silk #F2CCC3, Light Coral #E78F8E, Soft Blush #FFE6E8,
+   Celadon #ACD8AA, Cotton Candy #F48498. Source of truth for the React app is
+   the @theme block in apps/web/src/index.css -- keep the two in sync. */
 :root {
-  --bg: #f5f3ee;
+  --bg: #ffe6e8; /* Soft Blush */
   --surface: #ffffff;
-  --ink: #1d3557;
-  --ink-soft: #5a6b80;
-  --accent: #2a9d8f;
+  --ink: #4c2a30;
+  --ink-soft: #8a6a70;
+  --accent: #f48498; /* Cotton Candy */
   --accent-ink: #ffffff;
-  --warn: #e63946;
-  --line: #e3ddd1;
+  --positive: #acd8aa; /* Celadon */
+  --warn: #e78f8e; /* Light Coral */
+  --line: #f2ccc3; /* Almond Silk */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
   --radius: 14px;
   --tap: 48px;
