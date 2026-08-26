@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/*",
     "apps/*",
-    "functions"
+    "functions",
+    "recipe-clipper"
   ],
   "scripts": {
     "dev": "npm run dev -w apps/web",

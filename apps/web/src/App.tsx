@@ -2,6 +2,8 @@ import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import GroceryPage from './routes/grocery/GroceryPage';
 import AddItemPage from './routes/inventory/AddItemPage';
 import InventoryPage from './routes/inventory/InventoryPage';
+import RecipeDetailPage from './routes/recipe/RecipeDetailPage';
+import RecipeListPage from './routes/recipe/RecipeListPage';
 import RecipePage from './routes/recipe/RecipePage';
 
 const tabs = [
@@ -37,7 +39,10 @@ export default function App() {
       <main className="flex-1 pb-6">
         <Routes>
           <Route path="/" element={<Navigate to="/grocery" replace />} />
-          <Route path="/recipe" element={<RecipePage />} />
+          <Route path="/recipe" element={<RecipeListPage />} />
+          {/* Before the :id route, or "new" reads as a doc id. */}
+          <Route path="/recipe/new" element={<RecipePage />} />
+          <Route path="/recipe/:id" element={<RecipeDetailPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/inventory/add" element={<AddItemPage />} />
           <Route path="/grocery" element={<GroceryPage />} />

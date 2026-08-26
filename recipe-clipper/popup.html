@@ -32,15 +32,15 @@
           <input type="text" id="field-servings" placeholder="4" />
         </label>
         <label>⏱️ Total time
-          <input type="text" id="field-totalTime" placeholder="45 min" />
+          <input type="text" id="field-totalMinutes" placeholder="45 min" />
         </label>
       </div>
       <div class="row">
         <label>🔪 Prep time
-          <input type="text" id="field-prepTime" placeholder="15 min" />
+          <input type="text" id="field-prepMinutes" placeholder="15 min" />
         </label>
         <label>🔥 Cook time
-          <input type="text" id="field-cookTime" placeholder="30 min" />
+          <input type="text" id="field-cookMinutes" placeholder="30 min" />
         </label>
       </div>
       <label>🥕 Ingredients <span class="hint">one per line</span>
@@ -49,6 +49,7 @@
       <label>📋 Instructions <span class="hint">one per line</span>
         <textarea id="field-instructions" rows="6" placeholder="Preheat the oven to 350&deg;F"></textarea>
       </label>
+      <p id="review-error" hidden></p>
       <div class="actions">
         <button type="button" id="cancel-review">Cancel</button>
         <button type="submit" id="confirm-review">Looks good, save ✨</button>
@@ -65,8 +66,6 @@
     </div>
   </div>
 
-  <script src="src/form-utils.js"></script>
-  <script src="config.js"></script>
-  <script src="popup.js"></script>
+  <script type="module" src="./popup.js"></script>
 </body>
 </html>
