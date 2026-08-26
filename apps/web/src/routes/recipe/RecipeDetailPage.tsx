@@ -4,24 +4,19 @@
  * Read once rather than subscribed -- a recipe does not change under you mid-cook, and a
  * live listener here would only add a re-render for nothing.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { db, type Item, type Recipe } from '@grocery/shared';
-import { formatQuantity } from './quantity';
+import { db, type Recipe } from '@grocery/shared';
+import type { AddSummary } from '../grocery/addFromRecipe';
+import AddToGrocerySheet from './AddToGrocerySheet';
+import { formatMeasure } from './quantity';
 
 type Load =
   | { status: 'loading' }
   | { status: 'ready'; recipe: Recipe }
   | { status: 'missing' }
   | { status: 'error' };
-
-/** "1 1/2 cup" — the measurement half of an ingredient line, blank when unmeasured. */
-function measure(item: Item): string {
-  const amount = item.quantity == null ? '' : formatQuantity(item.quantity);
-  const unit = item.unit ?? '';
-  return [amount, unit].filter(Boolean).join(' ');
-}
 
 /** The timings that were actually filled in. All four fields are optional. */
 function timings(recipe: Recipe): { label: string; value: string }[] {
@@ -33,7 +28,13 @@ function timings(recipe: Recipe): { label: string; value: string }[] {
   return out;
 }
 
-function RecipeBody({ recipe }: { recipe: Recipe }) {
+function RecipeBody({
+  recipe,
+  onAddToGroceries,
+}: {
+  recipe: Recipe;
+  onAddToGroceries: () => void;
+}) {
   const facts = timings(recipe);
   const ingredients = recipe.ingredients ?? [];
   const steps = recipe.steps ?? [];
@@ -76,7 +77,7 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
             {ingredients.map((item, index) => {
-              const amount = measure(item);
+              const amount = formatMeasure(item);
               return (
                 // Two rows can share a key ("2 cups milk" and "1 cup milk" both key to
                 // "milk"), so the index has to be part of the React key.
@@ -89,6 +90,18 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
               );
             })}
           </ul>
+        )}
+
+        {/* 🔗 I1. Sits under the ingredients rather than in the header: this is a decision
+            you make while reading the list, not before you've seen it. */}
+        {ingredients.length > 0 && (
+          <button
+            type="button"
+            onClick={onAddToGroceries}
+            className="min-h-12 w-full rounded-card bg-accent font-semibold text-white active:opacity-80"
+          >
+            🛒 Add to grocery list
+          </button>
         )}
       </section>
 
@@ -139,9 +152,32 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
   );
 }
 
+/**
+ * "Added 6, topped up 2" — what actually happened, rather than a flat "Added to list".
+ * A merge is the surprising outcome, so it gets named.
+ */
+function summarize(summary: AddSummary): string {
+  const parts: string[] = [];
+  if (summary.added > 0) parts.push(`Added ${summary.added}`);
+  if (summary.merged > 0) parts.push(`topped up ${summary.merged} already on your list`);
+  return parts.length === 0 ? 'Nothing to add' : `${parts.join(', ')}.`;
+}
+
 export default function RecipeDetailPage() {
   const { id } = useParams<'id'>();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  function finish(summary: AddSummary) {
+    setSheetOpen(false);
+    setToast(summarize(summary));
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }
 
   useEffect(() => {
     if (!id) {
@@ -192,7 +228,28 @@ export default function RecipeDetailPage() {
         </p>
       )}
 
-      {load.status === 'ready' && <RecipeBody recipe={load.recipe} />}
+      {load.status === 'ready' && (
+        <RecipeBody recipe={load.recipe} onAddToGroceries={() => setSheetOpen(true)} />
+      )}
+
+      {sheetOpen && load.status === 'ready' && id && (
+        <AddToGrocerySheet
+          recipeId={id}
+          recipeTitle={load.recipe.title}
+          ingredients={load.recipe.ingredients ?? []}
+          onClose={() => setSheetOpen(false)}
+          onDone={finish}
+        />
+      )}
+
+      {toast && (
+        <p
+          role="status"
+          className="fixed inset-x-4 bottom-4 z-[60] mx-auto max-w-md rounded-card bg-ink px-4 py-3 text-center text-sm font-semibold text-white shadow-lg"
+        >
+          {toast}
+        </p>
+      )}
     </section>
   );
 }
