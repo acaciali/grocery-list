@@ -67,6 +67,128 @@
 
 ---
 
+## 🥫➜🍳 Cook from the pantry
+
+Ranks the cookbook by how well each recipe matches what's actually in the pantry. This is
+the INVENTORY ──► RECIPE arrow from CLAUDE.md — the last one in the loop.
+
+### Backend — ✅ done
+
+Not a Cloud Function, deliberately: no secret, no CORS, and both collections are ones the
+browser already reads directly. A function here would add a hop, lose real-time, and cost
+money to run `Set.has()`. It lives in shared alongside `inventory.ts` instead.
+
+- [x] `packages/shared/src/matching.ts` — pure scoring, no Firestore, no clock
+  - `matchRecipes(recipes, pantryKeys, options)` → ranked `RecipeMatch[]`
+  - `matchRecipe(recipe, pantryKeys, assumedKeys?)` — one recipe, for the detail screen
+  - `missingAcross(matches)` — de-duped shopping list across a selection, ready for I1
+  - `COMMON_STAPLES` — salt/pepper/water, opt-in via `assumedKeys`
+- [x] `packages/shared/src/recipes.ts` — the cookbook reads that were missing
+  - `listRecipes()` · `getRecipe(id)` · `subscribeToRecipes(cb, onError)` → `RecipeRow`
+  - `findRecipeMatches(options)` — one-shot: both reads in parallel, then rank
+- [x] Tests: `matching.test.ts` (pure, 30 cases), `recipes.test.ts` (Firestore mocked)
+
+**Three sort modes, because "matches the most" has three honest readings:**
+
+| `sort` | Orders by | Answers |
+|---|---|---|
+| `'missing'` *(default)* | fewest items to buy | "What can I cook tonight?" |
+| `'coverage'` | highest fraction of the recipe | fairest across recipe sizes |
+| `'matches'` | most ingredients matched | the literal reading — favours long recipes |
+
+Default is `'missing'` because a 20-ingredient curry you have 15 of is not dinner, and a
+3-ingredient pasta you have all of is.
+
+### Frontend — todo
+
+Build in this order; each step is demoable on its own.
+
+- [ ] **1. `useRecipeMatches()` hook** in `routes/recipe/`
+  - Two subscriptions, not `findRecipeMatches()` — the list must re-rank the moment
+    someone adds milk on the Inventory tab. That live re-rank *is* the demo.
+  - `subscribeToRecipes` + `subscribeToInventory`, hold both in state, run
+    `matchRecipes()` in a `useMemo` over the pair
+  - `loading` stays true until **both** have delivered a first snapshot
+  - Pass `onError` to both — a failed listen never sends a first snapshot, so without it
+    the screen waits forever (same trap `useInventory` already documents)
+  - Build the pantry `Set` in the memo, not per recipe
+- [ ] **2. "Cook from my pantry" view** — new route section under `routes/recipe/`
+  - Recipe card: title, image, **`have`/`total` badge**, and the missing items by name
+  - "You have 5 of 7 — you need: cumin, lime" reads better than any percentage
+  - Sort control wired to the three `MatchSort` modes, default `'missing'`
+  - Filter chips: **Cook now** (`maxMissing: 0`) · **One stop** (`maxMissing: 2`) · All
+  - Pass `minMatches: 1` so recipes sharing nothing with the pantry stay off the list
+- [ ] **3. Staples toggle** — "Assume I have salt, pepper and water" (default **on**)
+  - Pass `COMMON_STAPLES` as `assumedKeys` when checked
+  - ⚠️ Render `via: 'assumed'` ingredients differently from `via: 'pantry'` — a dotted
+    underline, a "probably" tooltip, anything. The badge must never claim the pantry
+    holds something nobody logged. Same rule as the shelf-photo review grid.
+- [ ] **4. Empty and near-empty states**
+  - Empty pantry → "Add a few things to your pantry and we'll find you something"
+    linking to Inventory, *not* a list of every recipe scored 0
+  - Empty cookbook → link to the import/manual-entry form
+  - Nothing above the `maxMissing` filter → offer to widen it rather than showing nothing
+- [ ] **5. I1 handoff** — "Add the missing items to my grocery list"
+  - `missingAcross()` on the selected recipes → one de-duped write
+  - `source: 'recipe'`, `sourceId: recipe.id` so items stay traceable
+  - Confirm what was added vs. already on the list
+
+### ⚠️ Two writers, one `recipes` collection — schema drift is already here
+
+The vanilla pages were **never ported**. `recipes.html` + `recipe-list.js` (browse, live
+`onSnapshot`, search, expandable cards) and `recipe.html` + `recipes.js` (add form) still
+read and write the same `recipes` collection the React app uses — in a different shape:
+
+| | vanilla `recipes.js` | React `RecipePage.tsx` |
+|---|---|---|
+| title | `name` | `title` |
+| time | `minutes` | `totalMinutes` / `prepMinutes` / `cookMinutes` |
+| ingredients | `{ amount: "2 cups", name }` | `Item` — **with `key`** |
+| also | — | `tags`, `notes`, `createdBy` |
+
+This is exactly the drift CLAUDE.md says the TypeScript choice exists to prevent, and it
+got in through the gap the types don't cover: a `data() as Recipe` cast describes our
+writers, not the collection's history.
+
+It bites both directions — `recipe-list.js` reads `recipe.name`, so React-written recipes
+already show as **blank-titled cards** on the vanilla page.
+
+- [x] `toRow()` in `packages/shared/src/recipes.ts` is now an **adapter**, not a cast:
+      maps `name`→`title`, `minutes`→`totalMinutes`, and derives a `key` for every legacy
+      ingredient via `normalizeKey()`. Without that key, matching cannot work at all.
+- [x] `matchRecipe()` hardened as a seatbelt: keyless ingredients count as missing
+      individually rather than collapsing through the de-dupe Set, and the title tie-break
+      is null-safe (two untitled recipes used to throw a TypeError and kill the view).
+- [x] **DECIDED (2026-08-26): the contract shape is the one true shape.** All new work
+      targets `Recipe` from `packages/shared/src/types.ts`. The vanilla recipe pages stay
+      on disk and keep working — nobody is porting them, backfilling them, or deleting
+      them. They are simply not a consideration going forward.
+      - The adapter in `toRow()` stays. It is what lets old documents keep showing up in
+        the React app, and it is the reason the vanilla add form can still write a keyless
+        recipe without breaking anything.
+      - Nothing new should ever *write* the old shape.
+- [ ] Legacy free-text `amount` ("2 cups") is dropped on read — splitting it into
+      `quantity` + `unit` needs `parseIngredientLine()`. Legacy amounts render blank in
+      React until then; the vanilla page still shows them.
+- [ ] README's repo layout lists only `index.html`, `groceries.js`, `style.css`,
+      `firebase-config.js` as vanilla leftovers. The four recipe files are missing from
+      that list, which is part of why this went unnoticed.
+
+### Known gap to raise at the all-hands ⚠️
+
+Trailing prep phrases fork the key: `"salt and pepper, to taste"` → `salt-and-pepper-to-taste`,
+`"parsley, for garnish"` → `parsley-for-garnish`. No staples list can enumerate its way
+out — the fix is stripping trailing prep phrases in `normalizeKey()`, which changes
+matching for Grocery's `has()` and Inventory's de-dupe too, so it is a shared-contract
+decision rather than something this feature should have changed on its own. There is a
+skipped test standing on it in `matching.test.ts`; un-skip it when the change lands.
+
+Related and cheaper: `"salt and pepper"` is one line holding two ingredients. Splitting
+compound lines belongs in `parseIngredientLine()`, which CLAUDE.md specifies but nobody
+has written yet.
+
+---
+
 ## Integration duties 🔗
 
 - [ ] **I1 (with Grocery):** "Add ingredients to grocery list" on the detail view
